@@ -1,0 +1,17 @@
+[project]
+name = "render_sbgn_py"
+version = "0.1.0"
+description = "SBGNML renderer using pycairo."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pycairo>=1.25.0"]
+
+[project.scripts]
+render_sbgn_py = "render_sbgn_py.cli:main"
+
+[tool.black]
+line-length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
