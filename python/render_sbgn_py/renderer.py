@@ -1353,6 +1353,26 @@ def triangle_points(end: Point, prev: Point, size: float) -> Optional[List[Point
     return [p1, p2, end]
 
 
+def diamond_points(end: Point, prev: Point, size: float) -> Optional[List[Point]]:
+    """Compute diamond points for modulation arrowheads."""
+
+    dx = end.x - prev.x
+    dy = end.y - prev.y
+    length = math.hypot(dx, dy)
+    if length == 0:
+        return None
+    ux = dx / length
+    uy = dy / length
+    center = Point(end.x - ux * size * 0.5, end.y - uy * size * 0.5)
+    base = Point(end.x - ux * size, end.y - uy * size)
+    perp_x = -uy
+    perp_y = ux
+    half_width = size * 0.6
+    p1 = Point(center.x + perp_x * half_width, center.y + perp_y * half_width)
+    p2 = Point(center.x - perp_x * half_width, center.y - perp_y * half_width)
+    return [end, p1, base, p2]
+
+
 def draw_open_triangle(ctx: cairo.Context, end: Point, prev: Point, size: float) -> None:
     """Draw an open triangle arrowhead."""
 
@@ -1393,6 +1413,23 @@ def draw_filled_triangle(ctx: cairo.Context, end: Point, prev: Point, size: floa
     ctx.line_to(pts[1].x, pts[1].y)
     ctx.close_path()
     ctx.fill()
+
+
+def draw_open_diamond_opaque(ctx: cairo.Context, end: Point, prev: Point, size: float) -> None:
+    """Draw an open diamond arrowhead filled with white."""
+
+    pts = diamond_points(end, prev, size)
+    if not pts:
+        return
+    ctx.move_to(pts[0].x, pts[0].y)
+    ctx.line_to(pts[1].x, pts[1].y)
+    ctx.line_to(pts[2].x, pts[2].y)
+    ctx.line_to(pts[3].x, pts[3].y)
+    ctx.close_path()
+    ctx.set_source_rgb(1.0, 1.0, 1.0)
+    ctx.fill_preserve()
+    ctx.set_source_rgb(*BORDER_COLOR)
+    ctx.stroke()
 
 
 def draw_inhibition_bar(
@@ -1480,6 +1517,8 @@ def draw_arc(
         draw_open_triangle(ctx, end, prev, arrow_size)
     elif class_name in {"positive influence", "stimulation"}:
         draw_open_triangle_opaque(ctx, end, prev, arrow_size)
+    elif class_name == "modulation":
+        draw_open_diamond_opaque(ctx, end, prev, arrow_size)
     elif class_name == "production":
         draw_filled_triangle(ctx, end, prev, arrow_size)
     elif class_name in {"negative influence", "inhibition"}:
