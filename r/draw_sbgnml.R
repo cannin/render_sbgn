@@ -1391,6 +1391,8 @@ draw_arc <- function(points, arc_class) {
     draw_open_triangle(x_end, y_end, x_prev, y_prev, arrow_size, fill = NA)
   } else if (arc_class %in% c("positive influence", "stimulation")) {
     draw_open_triangle(x_end, y_end, x_prev, y_prev, arrow_size, fill = "white")
+  } else if (arc_class == "modulation") {
+    draw_open_diamond(x_end, y_end, x_prev, y_prev, arrow_size, fill = "white")
   } else if (arc_class == "production") {
     draw_open_triangle(x_end, y_end, x_prev, y_prev, arrow_size, fill = BORDER_COLOR)
   } else if (arc_class %in% c("negative influence", "inhibition")) {
@@ -1441,6 +1443,47 @@ draw_open_triangle <- function(x_end, y_end, x_prev, y_prev, size, fill = NA) {
     base_y + perp_y * half_width,
     base_y - perp_y * half_width,
     y_end
+  )
+  polygon(x_points, y_points, border = BORDER_COLOR, col = fill, lwd = DEFAULT_LINE_WIDTH)
+}
+
+#' Draw an open diamond arrowhead.
+#'
+#' @param x_end Arrow tip x coordinate.
+#' @param y_end Arrow tip y coordinate.
+#' @param x_prev Previous point x coordinate.
+#' @param y_prev Previous point y coordinate.
+#' @param size Arrow size.
+#' @param fill Fill color (NA for open).
+#'
+#' @return NULL.
+draw_open_diamond <- function(x_end, y_end, x_prev, y_prev, size, fill = NA) {
+  dx <- x_end - x_prev
+  dy <- y_end - y_prev
+  length <- sqrt(dx^2 + dy^2)
+  if (length == 0) {
+    return(invisible(NULL))
+  }
+  ux <- dx / length
+  uy <- dy / length
+  center_x <- x_end - ux * size * 0.5
+  center_y <- y_end - uy * size * 0.5
+  base_x <- x_end - ux * size
+  base_y <- y_end - uy * size
+  perp_x <- -uy
+  perp_y <- ux
+  half_width <- size * 0.6
+  x_points <- c(
+    x_end,
+    center_x + perp_x * half_width,
+    base_x,
+    center_x - perp_x * half_width
+  )
+  y_points <- c(
+    y_end,
+    center_y + perp_y * half_width,
+    base_y,
+    center_y - perp_y * half_width
   )
   polygon(x_points, y_points, border = BORDER_COLOR, col = fill, lwd = DEFAULT_LINE_WIDTH)
 }
