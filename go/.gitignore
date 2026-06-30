@@ -40,3 +40,5 @@ cmd
 
 # Binary
 render_sbgn_go
+
+.DS_Store
