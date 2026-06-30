@@ -26,3 +26,5 @@ __MACOSX/
 .AppleDouble
 .LSOverride
 Icon[]
+
+.DS_Store
