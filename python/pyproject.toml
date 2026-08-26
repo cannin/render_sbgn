@@ -6,8 +6,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["pycairo>=1.25.0"]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project.scripts]
 render_sbgn_py = "render_sbgn_py.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["render_sbgn_py"]
 
 [tool.black]
 line-length = 88
