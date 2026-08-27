@@ -1,6 +1,13 @@
-# Render all SBGN-ML examples to output_render_sbgn_r (PNG + SVG) using base R graphics.
+# Render all SBGN-ML examples to output_render_sbgn_r using base R graphics.
 
-source("render_sbgn_r/draw_sbgnml.R")
+arguments <- commandArgs(trailingOnly = FALSE)
+file_argument <- arguments[grepl("^--file=", arguments)]
+script_dir <- if (length(file_argument) == 0) {
+  normalizePath(".", mustWork = TRUE)
+} else {
+  dirname(normalizePath(sub("^--file=", "", file_argument[1]), mustWork = TRUE))
+}
+source(file.path(script_dir, "R", "draw_sbgnml.R"))
 
 INPUT_DIR <- "examples/sbgn"
 OUTPUT_DIR <- "output_render_sbgn_r"

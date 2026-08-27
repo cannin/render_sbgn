@@ -1,0 +1,23 @@
+Package: renderSbgnR
+Type: Package
+Title: Render SBGN-ML Diagrams with Base R Graphics
+Version: 0.1.0
+Authors@R: person("Cannin", "Contributors", role = c("aut", "cre"),
+    email = "noreply@example.com")
+Description: Parses Systems Biology Graphical Notation Markup Language
+    documents and renders their glyphs and arcs to PNG or SVG using base R
+    graphics.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.2)
+Imports:
+    grDevices,
+    graphics,
+    jsonlite,
+    stats,
+    utils,
+    xml2
+Suggests:
+    lintr,
+    testthat
+Config/testthat/edition: 3
