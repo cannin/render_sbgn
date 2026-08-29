@@ -3,7 +3,6 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Iterable
 
 from render_sbgn_py.renderer import (
     DEFAULT_PADDING_PX,
@@ -37,6 +36,12 @@ def parse_args() -> argparse.Namespace:
         help="Render an SBGNML file.",
     )
     draw_sbgnml.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=RENDERER_VERSION,
+    )
+    draw_sbgnml.add_argument(
         "-i",
         "--input-path",
         "--input_path",
@@ -57,11 +62,13 @@ def parse_args() -> argparse.Namespace:
         help="Optional output PNG or SVG path.",
     )
     draw_sbgnml.add_argument(
+        "-f",
         "--format",
         default="png,svg",
         help="Comma-separated output formats used when --output-path is omitted.",
     )
     draw_sbgnml.add_argument(
+        "-p",
         "--padding",
         type=float,
         default=DEFAULT_PADDING_PX,
@@ -79,6 +86,13 @@ def parse_args() -> argparse.Namespace:
         type=parse_bool,
         default=True,
         help="Render clone markers when present.",
+    )
+    draw_sbgnml.add_argument(
+        "--no-clone-markers",
+        "--no_clone_markers",
+        action="store_false",
+        dest="clone_markers",
+        help="Do not render clone markers.",
     )
     draw_sbgnml.add_argument(
         "--generate-render-test-manifest",
@@ -121,33 +135,12 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Auto-contrast label text against custom glyph colors.",
     )
-
-    render_examples = subparsers.add_parser(
-        "render-examples", help="Render all SBGN examples to an output directory."
-    )
-    render_examples.add_argument(
-        "--input-dir",
-        "--input_dir",
-        default=str(Path.cwd() / "examples" / "sbgn"),
-        help="Input directory containing .sbgn files.",
-    )
-    render_examples.add_argument(
-        "--output-dir",
-        "--output_dir",
-        default=str(Path.cwd() / "output_render_sbgn_py"),
-        help="Output directory for rendered PNGs.",
-    )
-    render_examples.add_argument(
-        "--padding",
-        type=float,
-        default=DEFAULT_PADDING_PX,
-        help="Padding around the diagram.",
-    )
-    render_examples.add_argument(
-        "--clone-markers",
-        "--clone_markers",
-        action="store_true",
-        help="Render clone markers when present.",
+    draw_sbgnml.add_argument(
+        "--no-auto-contrast-text",
+        "--no_auto_contrast_text",
+        action="store_false",
+        dest="auto_contrast_text",
+        help="Do not adjust label text color for custom glyph colors.",
     )
 
     return parser.parse_args()
@@ -170,18 +163,6 @@ def parse_bool(value: str | bool) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise argparse.ArgumentTypeError("expected true or false")
-
-
-def find_sbgn_files(input_dir: Path) -> Iterable[Path]:
-    """Yield all .sbgn files under the input directory.
-
-    Args:
-        input_dir: Directory to search.
-
-    Returns:
-        Iterable of .sbgn file paths.
-    """
-    return sorted(input_dir.rglob("*.sbgn"))
 
 
 def main() -> None:
@@ -244,20 +225,6 @@ def main() -> None:
             output_height=args.height,
             output_format=args.format,
         )
-        return
-
-    if args.command == "render-examples":
-        input_dir = Path(args.input_dir)
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        for sbgn_file in find_sbgn_files(input_dir):
-            output_path = output_dir / f"{sbgn_file.stem}_python.png"
-            draw_sbgnml(
-                sbgn_file,
-                output_path,
-                padding=args.padding,
-                show_clone_markers=args.clone_markers,
-            )
         return
 
 

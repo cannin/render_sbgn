@@ -32,7 +32,14 @@ Run individual checks with:
 (cd rust && cargo test)
 (cd go && go test ./...)
 ./scripts/test-r.sh
+./scripts/test-cli.sh
 ./scripts/test-conformance.sh
+```
+
+Regenerate R package documentation from its roxygen2 source comments with:
+
+```bash
+Rscript -e 'roxygen2::roxygenise("r")'
 ```
 
 Build the Linux musl Rust release with:
@@ -75,6 +82,7 @@ Windows release binaries. Linux and Windows target amd64; macOS targets arm64.
 - `SHA256SUMS.txt` covering every uploaded artifact.
 
 Before tagging, run `./scripts/test-all.sh`, the local `act` command above, and
+`./scripts/check-readme-previews.sh`, followed by
 `./scripts/check-versions.sh X.Y.Z`. Commit and push all release changes, then
 create the coordinated tags at the same commit:
 
@@ -87,7 +95,12 @@ git push origin vX.Y.Z go/vX.Y.Z
 
 The `vX.Y.Z` tag triggers release publication. The `go/vX.Y.Z` tag supplies the
 version required for the module rooted in `go/`. Never publish artifacts from
-an uncommitted working tree or move a tag that has already been published.
+an uncommitted working tree or move a tag that has already been published. The
+release workflow must keep its README preview-freshness job as a required
+dependency of the publish job. It regenerates both four-renderer composites
+from the tagged sources and blocks publication when either committed image's
+embedded source hash is stale or its regenerated appearance exceeds the
+documented cross-platform comparison tolerance.
 
 ## Editing constraints
 
@@ -109,6 +122,9 @@ an uncommitted working tree or move a tag that has already been published.
   libraries. Keep fonts embedded in the binary.
 - Use ASCII source, format with Black/flake8 where configured for Python,
   `cargo fmt` for Rust, `gofmt` for Go, and `lintr` for R.
+- Treat `r/R/draw_sbgnml.R` as the source of truth for R documentation. Keep
+  functions documented with roxygen2 comments and regenerate `r/NAMESPACE`
+  and `r/man/`; do not edit those generated files by hand.
 
 ## Repository pitfalls
 

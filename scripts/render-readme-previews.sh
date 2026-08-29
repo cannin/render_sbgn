@@ -3,8 +3,10 @@
 set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output_directory="$repository_root/docs/images"
+output_directory="${RENDER_PREVIEW_OUTPUT_DIR:-$repository_root/docs/images}"
 temporary_directory="$(mktemp -d)"
+preview_font="$repository_root/rust/assets/LiberationSans-Regular.ttf"
+preview_source_hash="$("$repository_root/scripts/preview-source-hash.sh")"
 
 cleanup() {
   rm -rf -- "$temporary_directory"
@@ -12,6 +14,17 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$output_directory"
+
+if command -v magick >/dev/null 2>&1; then
+  montage_command=(magick montage)
+  convert_command=(magick)
+elif command -v montage >/dev/null 2>&1 && command -v convert >/dev/null 2>&1; then
+  montage_command=(montage)
+  convert_command=(convert)
+else
+  printf 'ImageMagick is required to build README previews.\n' >&2
+  exit 1
+fi
 
 for diagram in af_all_glyphs pd_all_glyphs; do
   input_path="$repository_root/render_examples/sbgn_all_symbols/$diagram.sbgn"
@@ -39,14 +52,17 @@ for diagram in af_all_glyphs pd_all_glyphs; do
       --output-path "$temporary_directory/$diagram-r.png"
   )
 
-  magick montage \
-    -font Arial -pointsize 28 -fill '#24292f' -background white \
+  "${montage_command[@]}" \
+    -font "$preview_font" -pointsize 28 -fill '#24292f' -background white \
     -label 'Python' "$temporary_directory/$diagram-python.png" \
     -label 'Rust' "$temporary_directory/$diagram-rust.png" \
     -label 'Go' "$temporary_directory/$diagram-go.png" \
     -label 'R' "$temporary_directory/$diagram-r.png" \
     -tile 2x2 -geometry '800x540+24+24' miff:- | \
-    magick miff:- -depth 8 -strip "$output_directory/${diagram}_renderers.png"
+    "${convert_command[@]}" miff:- -depth 8 -strip png:- | \
+    "${convert_command[@]}" png:- \
+      -set comment "render_sbgn-preview-source=$preview_source_hash" \
+      "$output_directory/${diagram}_renderers.png"
 done
 
 printf 'Updated renderer previews in %s\n' "$output_directory"

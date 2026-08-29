@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - "**"
     paths:
       - "rust/**"
       - "go/**"
@@ -38,7 +40,7 @@ jobs:
       - name: Install Ubuntu system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libcairo2-dev libxml2-dev pkg-config python3-dev
+          sudo apt-get install --yes fonts-liberation imagemagick libcairo2-dev libxml2-dev pkg-config python3-dev
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
@@ -86,9 +88,12 @@ jobs:
       - name: Test all renderers
         run: ./scripts/test-all.sh
 
+      - name: Verify README renderer previews are current
+        run: ./scripts/check-readme-previews.sh
+
       - name: Build and verify Rust musl release
         run: |
           ./scripts/build-rust-musl.sh
           binary="rust/target/x86_64-unknown-linux-musl/release/render_sbgn_rs"
-          test "$("$binary" --version)" = "0.0.5"
+          test "$("$binary" --version)" = "0.0.6"
           file "$binary" | grep -Eq 'statically linked|static-pie linked'

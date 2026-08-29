@@ -82,9 +82,10 @@ Rscript r/draw_sbgnml.R \
 
 The four CLIs accept SBGN-ML input and support PNG, SVG, fixed canvas sizes,
 padding, clone markers, glyph colors, style JSON, and deterministic render-test
-manifests. The common input/output flags are `--input-path` and
-`--output-path`; run the selected implementation with `--help` for its complete
-native command syntax.
+manifests. Their shared CLI includes `-i`/`--input-path`,
+`-o`/`--output-path`, `-p`/`--padding`, `-f`/`--format`, clone-marker and text
+contrast controls, color/style inputs, and manifest generation. Every CLI
+supports equivalent `-h` and `--help` output for its native invocation.
 
 Invalid XML, missing inputs, unsupported output extensions, invalid options,
 and conflicting color/style sources return a nonzero status. PNG bytes are not

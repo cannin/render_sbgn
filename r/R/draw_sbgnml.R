@@ -1,9 +1,20 @@
 # Render SBGN-ML diagrams using base R graphics and xml2.
 # This copy mirrors the JavaScript Cytoscape renderer used by the Shiny app.
 
+#' Package imports used by the renderer.
+#'
+#' @import grDevices
+#' @import graphics
+#' @import jsonlite
+#' @import stats
+#' @import utils
+#' @import xml2
+#' @noRd
+NULL
+
 # Configuration constants for layout and styling.
 DEFAULT_PADDING_PX <- 50
-RENDERER_VERSION <- "0.0.5"
+RENDERER_VERSION <- "0.0.6"
 FONT_MIN_PX <- 6
 FONT_BASE_PX <- 12
 FONT_FAMILY <- "Liberation Sans"
@@ -44,6 +55,7 @@ JS_TEXT_PADDING_PX <- 8
 #' @param value Character or numeric value to convert.
 #'
 #' @return Numeric value or NA_real_ if missing.
+#' @noRd
 as_numeric <- function(value) {
   if (is.na(value) || is.null(value) || value == "") {
     return(NA_real_)
@@ -56,6 +68,7 @@ as_numeric <- function(value) {
 #' @param font_px Font size in pixels.
 #'
 #' @return Numeric cex scale.
+#' @noRd
 font_px_to_cex <- function(font_px) {
   rendered_font_px <- max(FONT_MIN_PX, font_px * renderer_state$render_scale)
   rendered_font_px / FONT_BASE_PX
@@ -66,6 +79,7 @@ font_px_to_cex <- function(font_px) {
 #' @param channel Numeric sRGB channel between 0 and 1.
 #'
 #' @return Linearized RGB channel.
+#' @noRd
 device_size_pixels <- function() {
   size_px <- dev.size("px")
   if (any(!is.finite(size_px)) || any(is.na(size_px))) {
@@ -81,6 +95,7 @@ device_size_pixels <- function() {
 #' @param padding Padding in SBGN coordinate units.
 #'
 #' @return Numeric scale capped at one to match Cytoscape fit behavior.
+#' @noRd
 compute_render_scale <- function(bounds, padding) {
   size_px <- device_size_pixels()
   diagram_width <- bounds$max_x - bounds$min_x + 2 * padding
@@ -98,6 +113,7 @@ compute_render_scale <- function(bounds, padding) {
 #' @param cex Font scale.
 #'
 #' @return Character vector of line chunks.
+#' @noRd
 split_word_to_width <- function(word, max_width, cex) {
   characters <- strsplit(word, "", fixed = TRUE)[[1]]
   lines <- character(0)
@@ -123,6 +139,7 @@ split_word_to_width <- function(word, max_width, cex) {
 #' @param cex Font scale.
 #'
 #' @return Character vector of wrapped lines.
+#' @noRd
 wrap_label_line <- function(label_line, max_width, cex) {
   label_line <- trimws(label_line)
   if (label_line == "" || !is.finite(max_width) || max_width <= 0) {
@@ -166,6 +183,7 @@ wrap_label_line <- function(label_line, max_width, cex) {
 #' @param cex Font scale.
 #'
 #' @return Character vector of wrapped lines.
+#' @noRd
 wrap_label_text <- function(label, max_width, cex) {
   label <- gsub("\r", "", label)
   label <- gsub("[ \t]+", " ", label)
@@ -181,6 +199,7 @@ wrap_label_text <- function(label, max_width, cex) {
 #' @param max_height Maximum text height in user units.
 #'
 #' @return List with lines, cex, and line_height.
+#' @noRd
 fit_label_text <- function(label, font_px, max_width, max_height) {
   cex <- font_px_to_cex(font_px)
   lines <- wrap_label_text(label, max_width, cex)
@@ -196,6 +215,7 @@ fit_label_text <- function(label, font_px, max_width, max_height) {
 #' @param variable State variable name.
 #'
 #' @return Combined label string.
+#' @noRd
 state_variable_label <- function(value, variable) {
   parts <- c(value, variable)
   parts <- parts[!vapply(parts, is.null, logical(1))]
@@ -203,6 +223,13 @@ state_variable_label <- function(value, variable) {
   paste(parts, collapse = "@")
 }
 
+#' Compute bounds spanning visible glyphs and arcs.
+#'
+#' @param glyphs List of parsed glyph records.
+#' @param arcs List of parsed arc records.
+#'
+#' @return Named list containing minimum and maximum coordinates.
+#' @noRd
 compute_bounds <- function(glyphs, arcs) {
   x_values <- numeric(0)
   y_values <- numeric(0)
@@ -237,6 +264,7 @@ compute_bounds <- function(glyphs, arcs) {
 #' @param ns XML namespace mapping.
 #'
 #' @return Named list with x, y, w, h as numeric values or NULL.
+#' @noRd
 extract_bbox <- function(glyph, ns) {
   bbox_node <- xml_find_first(glyph, "./sbgn:bbox", ns)
   if (length(bbox_node) == 0) {
@@ -256,6 +284,7 @@ extract_bbox <- function(glyph, ns) {
 #' @param ns XML namespace mapping.
 #'
 #' @return Named list with optional width and height values.
+#' @noRd
 extract_extra_size <- function(glyph, ns) {
   width_node <- xml_find_first(glyph, ".//*[local-name()='w']", ns)
   height_node <- xml_find_first(glyph, ".//*[local-name()='h']", ns)
@@ -273,6 +302,7 @@ extract_extra_size <- function(glyph, ns) {
 #' @param ns XML namespace mapping.
 #'
 #' @return Label string (may include newlines).
+#' @noRd
 extract_label <- function(glyph, ns) {
   label_node <- xml_find_first(glyph, "./sbgn:label", ns)
   label_text <- xml_attr(label_node, "text")
@@ -288,6 +318,7 @@ extract_label <- function(glyph, ns) {
 #' @param ns XML namespace mapping.
 #'
 #' @return Data frame with x and y columns (possibly empty).
+#' @noRd
 extract_ports <- function(glyph, ns) {
   ports <- xml_find_all(glyph, "./sbgn:port", ns)
   if (length(ports) == 0) {
@@ -307,6 +338,7 @@ extract_ports <- function(glyph, ns) {
 #' @param ns XML namespace mapping.
 #'
 #' @return Data frame with ordered x and y columns.
+#' @noRd
 extract_arc_points <- function(arc, ns) {
   start_node <- xml_find_first(arc, "./sbgn:start", ns)
   end_node <- xml_find_first(arc, "./sbgn:end", ns)
@@ -333,6 +365,7 @@ extract_arc_points <- function(arc, ns) {
 #' @param parent_id Optional parent id.
 #'
 #' @return List of glyph records.
+#' @noRd
 parse_glyph_node <- function(glyph, ns, parent_id = NULL) {
   id <- xml_attr(glyph, "id")
   class_name <- xml_attr(glyph, "class")
@@ -379,6 +412,7 @@ parse_glyph_node <- function(glyph, ns, parent_id = NULL) {
 #' @param input_path Path to the SBGN XML file.
 #'
 #' @return List containing glyphs, arcs, and bounds.
+#' @noRd
 parse_sbgn <- function(input_path) {
   doc <- read_xml(input_path)
   ns <- xml_ns(doc)
@@ -433,6 +467,7 @@ parse_sbgn <- function(input_path) {
 #' @param bbox Bounding box list.
 #'
 #' @return Pixel rect list with x0, y0, width, height, center.
+#' @noRd
 bbox_pixel_rect <- function(bbox) {
   x0 <- bbox$x
   y0 <- bbox$y
@@ -452,6 +487,7 @@ bbox_pixel_rect <- function(bbox) {
 #' @param glyph Parsed glyph list.
 #'
 #' @return Pixel rect list with x0, y0, width, height, center.
+#' @noRd
 sbgnviz_manifest_rect <- function(glyph) {
   center <- list(
     x = glyph$bbox$x + glyph$bbox$w / 2,
@@ -505,6 +541,7 @@ sbgnviz_manifest_rect <- function(glyph) {
 #' @param glyph Parsed glyph list.
 #'
 #' @return Numeric span or NA_real_.
+#' @noRd
 sbgnviz_port_span <- function(glyph) {
   if (!is_ported_glyph_class(glyph$class) || nrow(glyph$ports) < 2) {
     return(NA_real_)
@@ -523,6 +560,7 @@ sbgnviz_port_span <- function(glyph) {
 #' @param class_name SBGN glyph class.
 #'
 #' @return TRUE for process and logical-operator glyph classes.
+#' @noRd
 is_ported_glyph_class <- function(class_name) {
   class_name %in% c(
     "process",
@@ -545,6 +583,7 @@ is_ported_glyph_class <- function(class_name) {
 #' @param n Number of points.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 ellipse_points <- function(cx, cy, rx, ry, n = 60) {
   theta <- seq(0, 2 * pi, length.out = n)
   data.frame(
@@ -553,19 +592,34 @@ ellipse_points <- function(cx, cy, rx, ry, n = 60) {
   )
 }
 
-#' Quadratic Bezier curve points.
+#' Sample points along a circular arc.
 #'
-#' @param p0 Start point list.
-#' @param p1 Control point list.
-#' @param p2 End point list.
+#' @param cx Circle center x coordinate.
+#' @param cy Circle center y coordinate.
+#' @param r Circle radius.
+#' @param start_angle Starting angle in radians.
+#' @param end_angle Ending angle in radians.
 #' @param n Number of samples.
 #'
 #' @return Data frame of points.
+#' @noRd
 arc_points <- function(cx, cy, r, start_angle, end_angle, n = 12) {
   theta <- seq(start_angle, end_angle, length.out = n)
   data.frame(x = cx + r * cos(theta), y = cy + r * sin(theta))
 }
 
+#' Sample points along a quadratic Bezier curve.
+#'
+#' @param x0 Start x coordinate.
+#' @param y0 Start y coordinate.
+#' @param cx Control-point x coordinate.
+#' @param cy Control-point y coordinate.
+#' @param x1 End x coordinate.
+#' @param y1 End y coordinate.
+#' @param n Number of samples.
+#'
+#' @return Data frame of points.
+#' @noRd
 quadratic_points <- function(x0, y0, cx, cy, x1, y1, n = 12) {
   t <- seq(0, 1, length.out = n)
   data.frame(
@@ -584,6 +638,7 @@ quadratic_points <- function(x0, y0, cx, cy, x1, y1, n = 12) {
 #' @param n_arc Points per corner.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 round_rect_points <- function(x0, y0, x1, y1, radius, n_arc = 12) {
   r <- min(radius, (x1 - x0) / 2, (y1 - y0) / 2)
   points <- rbind(
@@ -609,6 +664,7 @@ round_rect_points <- function(x0, y0, x1, y1, radius, n_arc = 12) {
 #' @param radius Corner radius.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 hexagon_points <- function(rect) {
   x0 <- rect$x0
   y0 <- rect$y0
@@ -625,6 +681,7 @@ hexagon_points <- function(rect) {
 #' @param rect Pixel rect list.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 stadium_points <- function(rect) {
   round_rect_points(
     rect$x0,
@@ -641,6 +698,7 @@ stadium_points <- function(rect) {
 #' @param rect Pixel rect list.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 complex_points <- function(rect) {
   corner <- max(1, min(12, rect$width / 3, rect$height / 3))
   data.frame(
@@ -672,6 +730,7 @@ complex_points <- function(rect) {
 #' @param rect Pixel rect list.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 barrel_points <- function(rect) {
   x0 <- rect$x0
   y0 <- rect$y0
@@ -696,6 +755,7 @@ barrel_points <- function(rect) {
 #' @param rect Pixel rect list.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 bottom_round_rect_points <- function(rect) {
   round_rect_points(
     rect$x0,
@@ -713,6 +773,7 @@ bottom_round_rect_points <- function(rect) {
 #' @param orientation Tag orientation.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 tag_points <- function(rect, orientation = "right") {
   x0 <- rect$x0
   y0 <- rect$y0
@@ -736,6 +797,7 @@ tag_points <- function(rect, orientation = "right") {
 #' @param rect Pixel rect list.
 #'
 #' @return Data frame with x and y.
+#' @noRd
 perturbing_agent_points <- function(rect) {
   data.frame(
     x = c(
@@ -763,6 +825,7 @@ perturbing_agent_points <- function(rect) {
 #' @param glyph Parsed glyph record.
 #'
 #' @return Data frame containing polygon x/y coordinates.
+#' @noRd
 ported_glyph_points <- function(rect, glyph) {
   orientation <- "horizontal"
   if (!is.null(glyph$ports) && nrow(glyph$ports) >= 2) {
@@ -896,6 +959,18 @@ ported_glyph_points <- function(rect, glyph) {
   )
 }
 
+#' Draw centered, wrapped text inside a bounded area.
+#'
+#' @param x Horizontal center coordinate.
+#' @param y Vertical center coordinate.
+#' @param label Text label.
+#' @param font_px Font size in pixels.
+#' @param max_width Maximum text width in user units.
+#' @param max_height Maximum text height in user units.
+#' @param color Text color.
+#'
+#' @return `NULL` invisibly.
+#' @noRd
 draw_text_centered <- function(
   x,
   y,
@@ -926,24 +1001,22 @@ draw_text_centered <- function(
   )
 }
 
-#' Draw text aligned to the bottom center of a rectangle.
+#' Test whether a glyph class is hidden as an independent glyph.
 #'
-#' @param rect Pixel rect list.
-#' @param label Text label.
-#' @param font_px Font size in pixels.
+#' @param class_name SBGN glyph class name.
 #'
-#' @return NULL.
+#' @return A logical scalar.
+#' @noRd
 is_js_hidden_glyph_class <- function(class_name) {
   class_name %in% c("unit of information", "state variable", "terminal")
 }
 
 #' Choose the JavaScript renderer text color for a glyph color fill.
 #'
-#' Args:
-#'   fill_color: Hex color string.
+#' @param fill_color Hex color string.
 #'
-#' Returns:
-#'   Hex text color used by the JavaScript renderer.
+#' @return Hex text color used by the JavaScript renderer.
+#' @noRd
 js_text_color_for_fill <- function(fill_color) {
   match <- regexec("^#?([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})$", fill_color)
   parts <- regmatches(fill_color, match)[[1]]
@@ -966,11 +1039,10 @@ js_text_color_for_fill <- function(fill_color) {
 
 #' Load a style JSON file.
 #'
-#' Args:
-#'   path: JSON file path.
+#' @param path JSON file path.
 #'
-#' Returns:
-#'   Named list style configuration.
+#' @return Named list style configuration.
+#' @noRd
 load_style_json_file <- function(path) {
   style_config <- jsonlite::fromJSON(path, simplifyVector = FALSE)
   if (is.null(style_config$styles) || !is.list(style_config$styles)) {
@@ -981,11 +1053,10 @@ load_style_json_file <- function(path) {
 
 #' Load glyph colors from a JSON file.
 #'
-#' Args:
-#'   path: JSON file path.
+#' @param path JSON file path.
 #'
-#' Returns:
-#'   Named character vector or NULL.
+#' @return Named character vector or NULL.
+#' @noRd
 load_glyph_colors_json_file <- function(path) {
   parsed <- jsonlite::fromJSON(path, simplifyVector = FALSE)
   colors <- if (!is.null(parsed$glyph_colors)) parsed$glyph_colors else parsed
@@ -1000,11 +1071,10 @@ load_glyph_colors_json_file <- function(path) {
 
 #' Return the active style entry for a glyph class.
 #'
-#' Args:
-#'   class_name: SBGN glyph class.
+#' @param class_name SBGN glyph class.
 #'
-#' Returns:
-#'   Style entry list or NULL.
+#' @return Style entry list or NULL.
+#' @noRd
 style_entry_for_class <- function(class_name) {
   styles <- renderer_state$style_config$styles
   if (is.null(styles)) {
@@ -1040,8 +1110,8 @@ style_entry_for_class <- function(class_name) {
 
 #' Return active edge color.
 #'
-#' Returns:
-#'   R color string.
+#' @return R color string.
+#' @noRd
 style_edge_color <- function() {
   if (!is.null(renderer_state$style_config$edge_color)) {
     return(renderer_state$style_config$edge_color)
@@ -1051,12 +1121,12 @@ style_edge_color <- function() {
 
 #' Get the glyph color fill used by the JavaScript renderer.
 #'
-#' Args:
-#'   glyph: Glyph record.
-#'   glyph_colors: Named character vector mapping labels or ids to colors.
+#' @param glyph Glyph record.
+#' @param glyph_colors Named character vector mapping labels or ids to colors.
+#' @param glyph_color_type Whether color keys match labels or IDs.
 #'
-#' Returns:
-#'   Glyph fill color or NULL.
+#' @return Glyph fill color or NULL.
+#' @noRd
 js_glyph_fill_color <- function(
   glyph,
   glyph_colors = NULL,
@@ -1080,12 +1150,13 @@ js_glyph_fill_color <- function(
 
 #' Return the Cytoscape stylesheet mapping for one SBGN glyph.
 #'
-#' Args:
-#'   glyph: Glyph record.
-#'   glyph_colors: Named character vector mapping labels or ids to colors.
+#' @param glyph Glyph record.
+#' @param glyph_colors Named character vector mapping labels or ids to colors.
+#' @param glyph_color_type Whether color keys match labels or IDs.
+#' @param auto_contrast_text Whether to contrast text against custom fills.
 #'
-#' Returns:
-#'   List describing the basic shape, label, and style.
+#' @return List describing the basic shape, label, and style.
+#' @noRd
 js_glyph_style <- function(
   glyph,
   glyph_colors = NULL,
@@ -1220,13 +1291,12 @@ js_glyph_style <- function(
 
 #' Draw a JavaScript-compatible shape with its label.
 #'
-#' Args:
-#'   points: Data frame of polygon coordinates.
-#'   rect: Glyph rectangle.
-#'   style: Style list from js_glyph_style().
+#' @param points Data frame of polygon coordinates.
+#' @param rect Glyph rectangle.
+#' @param style Style list from js_glyph_style().
 #'
-#' Returns:
-#'   NULL.
+#' @return NULL.
+#' @noRd
 draw_js_shape <- function(points, rect, style) {
   polygon(
     points$x,
@@ -1257,6 +1327,14 @@ draw_js_shape <- function(points, rect, style) {
   )
 }
 
+#' Build polygon points for a JavaScript-compatible glyph shape.
+#'
+#' @param glyph Parsed glyph record.
+#' @param rect Glyph rectangle.
+#' @param style Style list from `js_glyph_style()`.
+#'
+#' @return Data frame of polygon coordinates.
+#' @noRd
 js_shape_points <- function(glyph, rect, style) {
   if (is_ported_glyph_class(glyph$class)) {
     return(ported_glyph_points(rect, glyph))
@@ -1300,6 +1378,7 @@ js_shape_points <- function(glyph, rect, style) {
 #' @param glyph Parsed unit-of-information or state-variable glyph.
 #'
 #' @return Primitive shape name used by rendering and manifests.
+#' @noRd
 auxiliary_glyph_shape <- function(glyph) {
   if (glyph$class == "state variable") {
     return("stadium_round_rectangle")
@@ -1324,12 +1403,10 @@ auxiliary_glyph_shape <- function(glyph) {
 
 #' Draw one glyph using the JavaScript renderer's basic primitive mapping.
 #'
-#' Args:
-#'   glyph: Glyph record.
-#'   glyph_colors: Named character vector mapping labels or ids to colors.
+#' @param glyph Glyph record.
 #'
-#' Returns:
-#'   NULL.
+#' @return A logical scalar indicating whether the glyph was handled.
+#' @noRd
 draw_auxiliary_glyph <- function(glyph) {
   if (!(glyph$class %in% c("unit of information", "state variable"))) {
     return(FALSE)
@@ -1411,6 +1488,7 @@ draw_auxiliary_glyph <- function(glyph) {
 #' @param min_y Top edge of the retained horizontal band.
 #'
 #' @return Data frame containing the clipped polygon.
+#' @noRd
 clip_polygon_below_y <- function(points, min_y) {
   if (nrow(points) == 0) {
     return(points)
@@ -1438,6 +1516,15 @@ clip_polygon_below_y <- function(points, min_y) {
   output
 }
 
+#' Draw one glyph using JavaScript-compatible primitives.
+#'
+#' @param glyph Parsed glyph record.
+#' @param glyph_colors Named character vector mapping labels or IDs to colors.
+#' @param glyph_color_type Whether color keys match labels or IDs.
+#' @param auto_contrast_text Whether to contrast text against custom fills.
+#'
+#' @return `NULL` invisibly.
+#' @noRd
 draw_js_glyph <- function(
   glyph,
   glyph_colors = NULL,
@@ -1507,6 +1594,7 @@ draw_js_glyph <- function(
 #' @param connected_port_ids Port ids referenced by arcs.
 #'
 #' @return NULL.
+#' @noRd
 build_reference_maps <- function(glyphs) {
   glyph_lookup <- list()
   port_lookup <- list()
@@ -1536,6 +1624,7 @@ build_reference_maps <- function(glyphs) {
 #' @param glyph Glyph record.
 #'
 #' @return List with x and y.
+#' @noRd
 glyph_center_point <- function(glyph) {
   list(
     x = glyph$bbox$x + glyph$bbox$w / 2,
@@ -1549,6 +1638,7 @@ glyph_center_point <- function(glyph) {
 #' @param from_point List with x and y outside or near the glyph.
 #'
 #' @return List with x and y on the glyph bounds.
+#' @noRd
 glyph_boundary_point <- function(glyph, from_point) {
   center <- glyph_center_point(glyph)
   dx <- center$x - from_point$x
@@ -1593,12 +1683,11 @@ glyph_boundary_point <- function(glyph, from_point) {
 
 #' Resolve a JavaScript edge endpoint to the rendered glyph id.
 #'
-#' Args:
-#'   reference: Glyph or port id from an SBGN arc.
-#'   port_parent_lookup: Named list mapping port ids to owning glyph ids.
+#' @param reference Glyph or port id from an SBGN arc.
+#' @param port_parent_lookup Named list mapping port ids to owning glyph ids.
 #'
-#' Returns:
-#'   Glyph id or NULL.
+#' @return Glyph id or NULL.
+#' @noRd
 js_endpoint_glyph_id <- function(reference, port_parent_lookup) {
   if (is.null(reference) || is.na(reference)) {
     return(NULL)
@@ -1611,12 +1700,11 @@ js_endpoint_glyph_id <- function(reference, port_parent_lookup) {
 
 #' Intersect a line from a node center toward another point with an ellipse.
 #'
-#' Args:
-#'   glyph: Glyph record.
-#'   other_point: Opposite endpoint point.
+#' @param glyph Glyph record.
+#' @param other_point Opposite endpoint point.
 #'
-#' Returns:
-#'   List with x and y.
+#' @return List with x and y.
+#' @noRd
 ellipse_boundary_point <- function(glyph, other_point) {
   center <- glyph_center_point(glyph)
   dx <- other_point$x - center$x
@@ -1633,12 +1721,11 @@ ellipse_boundary_point <- function(glyph, other_point) {
 
 #' Get a JavaScript-compatible edge endpoint on the node boundary.
 #'
-#' Args:
-#'   glyph: Glyph record.
-#'   other_point: Opposite endpoint point.
+#' @param glyph Glyph record.
+#' @param other_point Opposite endpoint point.
 #'
-#' Returns:
-#'   List with x and y.
+#' @return List with x and y.
+#' @noRd
 js_node_boundary_point <- function(glyph, other_point) {
   style <- js_glyph_style(glyph)
   if (style$shape == "ellipse") {
@@ -1649,13 +1736,12 @@ js_node_boundary_point <- function(glyph, other_point) {
 
 #' Build JavaScript-compatible drawable arc endpoints.
 #'
-#' Args:
-#'   arc: Arc record.
-#'   glyph_lookup: Named list of glyph records.
-#'   port_parent_lookup: Named list mapping port ids to owning glyph ids.
+#' @param arc Arc record.
+#' @param glyph_lookup Named list of glyph records.
+#' @param port_parent_lookup Named list mapping port ids to owning glyph ids.
 #'
-#' Returns:
-#'   Data frame with x and y endpoint rows, or NULL when not drawable.
+#' @return Data frame with x and y endpoint rows, or NULL when not drawable.
+#' @noRd
 js_arc_points <- function(arc, glyph_lookup, port_parent_lookup) {
   source_id <- js_endpoint_glyph_id(arc$source, port_parent_lookup)
   target_id <- js_endpoint_glyph_id(arc$target, port_parent_lookup)
@@ -1727,6 +1813,7 @@ js_arc_points <- function(arc, glyph_lookup, port_parent_lookup) {
 #' @param port_id Referenced SBGN port ID.
 #'
 #' @return List with boundary x and y, or NULL when geometry is missing.
+#' @noRd
 js_non_cytoscape_port_endpoint <- function(glyph, port_id) {
   if (is.null(glyph$bbox) || is.null(glyph$ports) || nrow(glyph$ports) == 0) {
     return(NULL)
@@ -1764,6 +1851,7 @@ js_non_cytoscape_port_endpoint <- function(glyph, port_id) {
 #' @param port_parent_lookup Named list mapping port ids to owning glyph ids.
 #'
 #' @return Arc point data frame with ported endpoints snapped to their ports.
+#' @noRd
 js_arc_line_points <- function(
   arc,
   points,
@@ -1805,11 +1893,10 @@ js_arc_line_points <- function(
 
 #' Map an SBGN arc class to the JavaScript target marker primitive.
 #'
-#' Args:
-#'   arc_class: SBGN arc class.
+#' @param arc_class SBGN arc class.
 #'
-#' Returns:
-#'   Marker type string.
+#' @return Marker type string.
+#' @noRd
 js_arc_marker <- function(arc_class) {
   if (arc_class %in% c("consumption", "logic arc", "equivalence arc")) {
     return("none")
@@ -1834,6 +1921,7 @@ js_arc_marker <- function(arc_class) {
 #' @param arc_class SBGN arc class.
 #'
 #' @return Numeric displacement along the final arc segment.
+#' @noRd
 js_marker_tip_offset_source <- function(arc_class) {
   marker <- js_arc_marker(arc_class)
   if (marker %in% c("triangle", "triangle-cross")) {
@@ -1854,6 +1942,7 @@ js_marker_tip_offset_source <- function(arc_class) {
 #' @param points Resolved source-space arc points.
 #'
 #' @return List containing marker-tip x and y coordinates.
+#' @noRd
 js_arc_marker_point <- function(arc, points) {
   end_index <- nrow(points)
   other_index <- if (end_index > 2) end_index - 1 else 1
@@ -1873,15 +1962,14 @@ js_arc_marker_point <- function(arc, points) {
 
 #' Draw a filled triangle marker using the JavaScript edge color.
 #'
-#' Args:
-#'   x_end: Arrow tip x coordinate.
-#'   y_end: Arrow tip y coordinate.
-#'   x_prev: Previous point x coordinate.
-#'   y_prev: Previous point y coordinate.
-#'   size: Arrow size.
+#' @param x_end Arrow tip x coordinate.
+#' @param y_end Arrow tip y coordinate.
+#' @param x_prev Previous point x coordinate.
+#' @param y_prev Previous point y coordinate.
+#' @param size Arrow size.
 #'
-#' Returns:
-#'   NULL.
+#' @return NULL.
+#' @noRd
 draw_js_triangle <- function(x_end, y_end, x_prev, y_prev, size) {
   dx <- x_end - x_prev
   dy <- y_end - y_prev
@@ -1905,6 +1993,18 @@ draw_js_triangle <- function(x_end, y_end, x_prev, y_prev, size) {
   )
 }
 
+#' Transform marker-local polygon points onto an arc endpoint.
+#'
+#' @param x_end Marker-tip x coordinate.
+#' @param y_end Marker-tip y coordinate.
+#' @param x_prev Previous arc-point x coordinate.
+#' @param y_prev Previous arc-point y coordinate.
+#' @param size Marker scale.
+#' @param local_points Data frame of marker-local coordinates.
+#'
+#' @return Data frame of transformed coordinates, or `NULL` for a zero-length
+#'   segment.
+#' @noRd
 marker_polygon_points <- function(x_end, y_end, x_prev, y_prev, size, local_points) {
   dx <- x_end - x_prev
   dy <- y_end - y_prev
@@ -1922,6 +2022,20 @@ marker_polygon_points <- function(x_end, y_end, x_prev, y_prev, size, local_poin
   )
 }
 
+#' Draw a polygon marker at an arc endpoint.
+#'
+#' @param x_end Marker-tip x coordinate.
+#' @param y_end Marker-tip y coordinate.
+#' @param x_prev Previous arc-point x coordinate.
+#' @param y_prev Previous arc-point y coordinate.
+#' @param size Marker scale.
+#' @param local_points Data frame of marker-local coordinates.
+#' @param fill Polygon fill color.
+#' @param border Polygon border color.
+#' @param lwd Polygon border width.
+#'
+#' @return `NULL` invisibly.
+#' @noRd
 draw_js_marker_polygon <- function(
   x_end,
   y_end,
@@ -1942,15 +2056,14 @@ draw_js_marker_polygon <- function(
 
 #' Draw a tee marker using the JavaScript edge color.
 #'
-#' Args:
-#'   x_end: End x coordinate.
-#'   y_end: End y coordinate.
-#'   x_prev: Previous point x coordinate.
-#'   y_prev: Previous point y coordinate.
-#'   length: Tee marker length.
+#' @param x_end End x coordinate.
+#' @param y_end End y coordinate.
+#' @param x_prev Previous point x coordinate.
+#' @param y_prev Previous point y coordinate.
+#' @param length Tee marker length.
 #'
-#' Returns:
-#'   NULL.
+#' @return NULL.
+#' @noRd
 draw_js_tee <- function(x_end, y_end, x_prev, y_prev, length) {
   dx <- x_end - x_prev
   dy <- y_end - y_prev
@@ -1975,13 +2088,12 @@ draw_js_tee <- function(x_end, y_end, x_prev, y_prev, length) {
 
 #' Draw an arc line using the JavaScript renderer's basic edge mapping.
 #'
-#' Args:
-#'   arc: Arc record.
-#'   glyph_lookup: Named list of glyph records.
-#'   port_parent_lookup: Named list mapping port ids to owning glyph ids.
+#' @param arc Arc record.
+#' @param glyph_lookup Named list of glyph records.
+#' @param port_parent_lookup Named list mapping port ids to owning glyph ids.
 #'
-#' Returns:
-#'   NULL.
+#' @return NULL.
+#' @noRd
 draw_js_arc <- function(arc, glyph_lookup = list(), port_parent_lookup = list()) {
   points <- js_arc_points(arc, glyph_lookup, port_parent_lookup)
   if (is.null(points) || nrow(points) < 2) {
@@ -2010,6 +2122,7 @@ draw_js_arc <- function(arc, glyph_lookup = list(), port_parent_lookup = list())
 #' @param port_parent_lookup Named list mapping port ids to owning glyph ids.
 #'
 #' @return NULL.
+#' @noRd
 draw_js_arc_marker <- function(
   arc,
   glyph_lookup = list(),
@@ -2128,6 +2241,7 @@ draw_js_arc_marker <- function(
 #' @param arc Parsed arc record.
 #'
 #' @return NULL.
+#' @noRd
 draw_arc_auxiliary_glyphs <- function(arc) {
   for (glyph in arc$auxiliary_glyphs) {
     if (
@@ -2165,8 +2279,11 @@ draw_arc_auxiliary_glyphs <- function(arc) {
 #' @param arcs List of arcs.
 #' @param show_clone_markers Whether to draw clone markers.
 #' @param glyph_colors Named character vector from glyph label or id to color.
+#' @param glyph_color_type Whether color keys match labels or IDs.
+#' @param auto_contrast_text Whether to contrast text against custom fills.
 #'
-#' @return NULL.
+#' @return `NULL` invisibly.
+#' @noRd
 render_diagram <- function(
   glyphs,
   arcs,
@@ -2210,14 +2327,13 @@ render_diagram <- function(
 
 #' Create a basic graphical-element manifest for parsed SBGN.
 #'
-#' Args:
-#'   parsed: Parsed SBGN data from parse_sbgn().
-#'   glyph_colors: Named character vector mapping glyph labels or ids to colors.
-#'   glyph_color_type: Whether glyph_colors keys match labels or ids.
-#'   auto_contrast_text: Whether to use white text on dark glyph fills.
+#' @param parsed Parsed SBGN data from parse_sbgn().
+#' @param glyph_colors Named character vector mapping glyph labels or ids to colors.
+#' @param glyph_color_type Whether glyph_colors keys match labels or ids.
+#' @param auto_contrast_text Whether to use white text on dark glyph fills.
 #'
-#' Returns:
-#'   List with canvas bounds and basic rendered elements.
+#' @return List with canvas bounds and basic rendered elements.
+#' @noRd
 sbgnml_basic_render_manifest <- function(
   parsed,
   glyph_colors = NULL,
@@ -2518,15 +2634,14 @@ sbgnml_basic_render_manifest <- function(
 
 #' Transform a render-test manifest to rendered pixel coordinates.
 #'
-#' Args:
-#'   manifest: Source-coordinate manifest list.
-#'   bounds: Parsed diagram bounds.
-#'   padding: Render padding.
-#'   output_width: Output width in pixels.
-#'   output_height: Output height in pixels.
+#' @param manifest Source-coordinate manifest list.
+#' @param bounds Parsed diagram bounds.
+#' @param padding Render padding.
+#' @param output_width Output width in pixels.
+#' @param output_height Output height in pixels.
 #'
-#' Returns:
-#'   Manifest list in rendered pixel coordinates.
+#' @return Manifest list in rendered pixel coordinates.
+#' @noRd
 transform_manifest_to_rendered_pixels <- function(
   manifest,
   bounds,
@@ -2606,6 +2721,7 @@ transform_manifest_to_rendered_pixels <- function(
 #' @param output_height Requested rendered height.
 #'
 #' @return Calibration list or NULL.
+#' @noRd
 sbgnviz_all_symbols_calibration <- function(diagram_id, output_width, output_height) {
   if (diagram_id == "af_all_glyphs.sbgn" && output_width == 900 && output_height == 650) {
     return(list(
@@ -2636,6 +2752,7 @@ sbgnviz_all_symbols_calibration <- function(diagram_id, output_width, output_hei
 #'   dissociation glyph labels.
 #'
 #' @return NULL.
+#' @noRd
 render_parsed_sbgnml <- function(
   parsed,
   padding = DEFAULT_PADDING_PX,
@@ -2683,13 +2800,12 @@ render_parsed_sbgnml <- function(
 
 #' Resolve output files for SBGN rendering.
 #'
-#' Args:
-#'   input_path: Path to the SBGN XML file.
-#'   output_path: Optional explicit PNG or SVG output path.
-#'   output_format: Comma-separated output formats when output_path is NULL.
+#' @param input_path Path to the SBGN XML file.
+#' @param output_path Optional explicit PNG or SVG output path.
+#' @param output_format Comma-separated output formats when output_path is NULL.
 #'
-#' Returns:
-#'   Named list mapping formats to output paths.
+#' @return Named list mapping formats to output paths.
+#' @noRd
 render_output_paths <- function(
   input_path,
   output_path = NULL,
@@ -2725,6 +2841,8 @@ render_output_paths <- function(
 #' @param input_path Path to the SBGN XML file.
 #' @param output_path Optional output filename for a PNG or SVG.
 #' @param padding Padding in pixels.
+#' @param width Optional output width in pixels.
+#' @param height Optional output height in pixels.
 #' @param clone_markers Whether to draw clone markers.
 #' @param glyph_colors Named character vector from glyph label or id to color.
 #' @param glyph_color_type Whether glyph_colors keys match labels or ids.
@@ -2732,8 +2850,9 @@ render_output_paths <- function(
 #' @param show_process_node_labels Whether to show process, association, and
 #'   dissociation glyph labels.
 #' @param output_format Comma-separated output formats when output_path is NULL.
+#' @param style_config Optional renderer style configuration.
 #'
-#' @return NULL. Writes requested output files and closes devices.
+#' @return `NULL` invisibly. Writes requested output files and closes devices.
 #' @export
 draw_sbgnml <- function(
   input_path,
@@ -2804,12 +2923,11 @@ draw_sbgnml <- function(
 
 #' Parse a CLI boolean value.
 #'
-#' Args:
-#'   value: Character value to parse.
-#'   option_name: Option name used in error messages.
+#' @param value Character value to parse.
+#' @param option_name Option name used in error messages.
 #'
-#' Returns:
-#'   TRUE or FALSE.
+#' @return TRUE or FALSE.
+#' @noRd
 parse_bool <- function(value, option_name = "boolean option") {
   normalized <- tolower(trimws(value))
   if (normalized %in% c("true", "t", "1", "yes", "y")) {
@@ -2823,14 +2941,13 @@ parse_bool <- function(value, option_name = "boolean option") {
 
 #' Parse an optional CLI boolean value.
 #'
-#' Args:
-#'   args: Full argument vector.
-#'   index: Current argument index.
-#'   option_name: Option name used in error messages.
-#'   flag_value: Value to use when the option appears without an explicit value.
+#' @param args Full argument vector.
+#' @param index Current argument index.
+#' @param option_name Option name used in error messages.
+#' @param flag_value Value to use when the option appears without an explicit value.
 #'
-#' Returns:
-#'   List with value and next index.
+#' @return List with value and next index.
+#' @noRd
 parse_optional_bool_arg <- function(
   args,
   index,
@@ -2849,11 +2966,10 @@ parse_optional_bool_arg <- function(
 
 #' Parse JSON glyph colors from the CLI.
 #'
-#' Args:
-#'   raw_json: JSON object mapping glyph labels or ids to colors.
+#' @param raw_json JSON object mapping glyph labels or ids to colors.
 #'
-#' Returns:
-#'   Named character vector, or NULL for an empty object.
+#' @return Named character vector, or NULL for an empty object.
+#' @noRd
 parse_glyph_colors <- function(raw_json) {
   parsed <- jsonlite::fromJSON(raw_json)
   if (length(parsed) == 0) {
@@ -2868,14 +2984,68 @@ parse_glyph_colors <- function(raw_json) {
   as.character(parsed)
 }
 
+#' Build top-level draw_sbgnml.R command-line help text.
+#'
+#' @return Character string containing CLI usage and option descriptions.
+#' @noRd
+cli_usage_text <- function() {
+  paste(
+    "render_sbgn_r renders SBGNML diagrams to PNG and SVG.",
+    "",
+    "Usage:",
+    "  Rscript r/draw_sbgnml.R draw_sbgnml [OPTIONS]",
+    "",
+    "Run \"Rscript r/draw_sbgnml.R draw_sbgnml --help\" for rendering options.",
+    sep = "\n"
+  )
+}
+
+
+#' Build detailed help for the draw_sbgnml command.
+#'
+#' @return Character string containing CLI usage and option descriptions.
+#' @noRd
+draw_usage_text <- function() {
+  paste(
+    "Usage:",
+    "  Rscript r/draw_sbgnml.R draw_sbgnml --input-path FILE [OPTIONS]",
+    "",
+    "Options:",
+    "  -i, --input-path FILE             SBGNML input file.",
+    "  -o, --output-path FILE            Output PNG or SVG path.",
+    "  -f, --format FORMATS              Comma-separated formats (default: png,svg).",
+    "  -p, --padding PX                  Diagram padding (default: 50).",
+    "      --width PX                    Output width in pixels.",
+    "      --height PX                   Output height in pixels.",
+    "      --clone-markers BOOL          Enable or disable clone markers (default: true).",
+    "      --no-clone-markers            Disable clone markers.",
+    "      --glyph-colors JSON           Map glyph labels or IDs to CSS hex colors.",
+    "      --glyph-colors-json-file FILE Read glyph colors from JSON.",
+    "      --style-json-file FILE        Read renderer class styles from JSON.",
+    "      --glyph-color-type TYPE       Color keys are label or id (default: label).",
+    "      --auto-contrast-text BOOL     Adjust label contrast (default: true).",
+    "      --no-auto-contrast-text       Disable automatic label contrast.",
+    "      --generate-render-test-manifest",
+    "                                    Write a render-test manifest instead of images.",
+    "  -h, --help                        Show this help and exit.",
+    "  -v, --version                     Show the version and exit.",
+    sep = "\n"
+  )
+}
+
+
 #' Parse draw_sbgnml.R command-line arguments.
 #'
-#' Args:
-#'   args: Character vector of trailing command-line arguments.
+#' @param args Character vector of trailing command-line arguments.
 #'
-#' Returns:
-#'   Named list of parsed CLI options.
+#' @return Named list of parsed CLI options.
+#' @noRd
 parse_cli_args <- function(args) {
+  has_draw_command <- length(args) > 0 && identical(args[[1]], "draw_sbgnml")
+  if (has_draw_command) {
+    args <- args[-1]
+  }
+
   options <- list(
     input_path = NULL,
     output_path = NULL,
@@ -2899,7 +3069,11 @@ parse_cli_args <- function(args) {
     arg <- args[[index]]
     next_value <- if (index < length(args)) args[[index + 1]] else NULL
 
-    if (arg %in% c("-v", "--version", "version")) {
+    if (arg %in% c("-h", "--help", "help")) {
+      help_text <- if (has_draw_command) draw_usage_text() else cli_usage_text()
+      cat(help_text, "\n", sep = "")
+      quit(save = "no", status = 0)
+    } else if (arg %in% c("-v", "--version", "version")) {
       cat(RENDERER_VERSION, "\n", sep = "")
       quit(save = "no", status = 0)
     } else if (
@@ -2923,7 +3097,7 @@ parse_cli_args <- function(args) {
     } else if (arg == "--height" && !is.null(next_value)) {
       options$height <- as.numeric(next_value)
       index <- index + 2
-    } else if (arg == "--format" && !is.null(next_value)) {
+    } else if (arg %in% c("-f", "--format") && !is.null(next_value)) {
       options$output_format <- next_value
       index <- index + 2
     } else if (arg %in% c("--clone-markers", "--clone_markers")) {
@@ -3009,12 +3183,17 @@ parse_cli_args <- function(args) {
 
 #' Write a single render-test manifest JSON record for an SBGN file.
 #'
-#' Args:
-#'   input_path: SBGN input path.
-#'   output_path: Manifest JSON output path.
+#' @param input_path SBGN input path.
+#' @param output_path Manifest JSON output path.
+#' @param output_width Optional rendered width in pixels.
+#' @param output_height Optional rendered height in pixels.
+#' @param padding Render padding.
+#' @param glyph_colors Named character vector mapping labels or IDs to colors.
+#' @param glyph_color_type Whether color keys match labels or IDs.
+#' @param auto_contrast_text Whether to contrast text against custom fills.
+#' @param style_config Optional renderer style configuration.
 #'
-#' Returns:
-#'   NULL. Writes JSON to output_path.
+#' @return `NULL` invisibly. Writes JSON to `output_path`.
 #' @export
 write_render_test_manifest <- function(
   input_path,
@@ -3059,8 +3238,8 @@ write_render_test_manifest <- function(
 
 #' Run draw_sbgnml.R as a standalone script.
 #'
-#' Returns:
-#'   NULL.
+#' @return NULL.
+#' @noRd
 main <- function() {
   options <- parse_cli_args(commandArgs(trailingOnly = TRUE))
   if (is.null(options$input_path)) {

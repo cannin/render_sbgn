@@ -422,7 +422,10 @@ where
             println!("{RENDERER_VERSION}");
             std::process::exit(0);
         }
-        "-h" | "--help" | "help" => Err(anyhow!(usage_text())),
+        "-h" | "--help" | "help" => {
+            println!("{}", usage_text());
+            std::process::exit(0);
+        }
         _ => Err(anyhow!("Unknown command '{command}'.\n\n{}", usage_text())),
     }
 }
@@ -513,12 +516,13 @@ where
                 std::process::exit(0);
             }
             "-h" | "--help" => {
-                return Err(anyhow!(usage_text()));
+                println!("{}", draw_usage_text());
+                std::process::exit(0);
             }
             _ => {
                 return Err(anyhow!(
                     "Unknown draw_sbgnml argument '{arg}'.\n\n{}",
-                    usage_text()
+                    draw_usage_text()
                 ));
             }
         }
@@ -527,7 +531,7 @@ where
     let input = input.ok_or_else(|| {
         anyhow!(
             "Missing required --input-path argument.\n\n{}",
-            usage_text()
+            draw_usage_text()
         )
     })?;
     let color_input_count = usize::from(glyph_colors_provided)
@@ -610,7 +614,37 @@ fn parse_glyph_color_type(value: &str) -> Result<GlyphColorType> {
 }
 
 fn usage_text() -> &'static str {
-    "Usage: render_sbgn_rs draw_sbgnml --input-path FILE [-o FILE.png|FILE.svg] [--format png,svg] [--padding PX] [--width PX] [--height PX] [--clone-markers true|false] [--glyph-colors JSON | --glyph-colors-json-file FILE | --style-json-file FILE] [--glyph-color-type label|id] [--auto-contrast-text true|false] [--generate-render-test-manifest]"
+    r#"render_sbgn_rs renders SBGNML diagrams to PNG and SVG.
+
+Usage:
+  render_sbgn_rs draw_sbgnml [OPTIONS]
+
+Run "render_sbgn_rs draw_sbgnml --help" for rendering options."#
+}
+
+fn draw_usage_text() -> &'static str {
+    r#"Usage:
+  render_sbgn_rs draw_sbgnml --input-path FILE [OPTIONS]
+
+Options:
+  -i, --input-path FILE             SBGNML input file.
+  -o, --output-path FILE            Output PNG or SVG path.
+  -f, --format FORMATS              Comma-separated formats (default: png,svg).
+  -p, --padding PX                  Diagram padding (default: 50).
+      --width PX                    Output width in pixels.
+      --height PX                   Output height in pixels.
+      --clone-markers BOOL          Enable or disable clone markers (default: true).
+      --no-clone-markers            Disable clone markers.
+      --glyph-colors JSON           Map glyph labels or IDs to CSS hex colors.
+      --glyph-colors-json-file FILE Read glyph colors from JSON.
+      --style-json-file FILE        Read renderer class styles from JSON.
+      --glyph-color-type TYPE       Color keys are label or id (default: label).
+      --auto-contrast-text BOOL     Adjust label contrast (default: true).
+      --no-auto-contrast-text       Disable automatic label contrast.
+      --generate-render-test-manifest
+                                    Write a render-test manifest instead of images.
+  -h, --help                        Show this help and exit.
+  -v, --version                     Show the version and exit."#
 }
 
 fn draw_sbgnml(

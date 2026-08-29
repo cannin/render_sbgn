@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.6 - 2026-08-29
+
+- Aligned the Python, Rust, Go, and R command-line flags and help behavior.
+- Added shared CLI parity tests and removed Python's batch-only CLI options.
+- Migrated the R package documentation and namespace generation to roxygen2.
+- Added CI and release gates that block stale multi-renderer README previews.
+
 ## 0.0.5 - 2026-08-29
 
 - Consolidated the Python, Rust, Go, and R renderer histories into one

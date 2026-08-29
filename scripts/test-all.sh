@@ -29,4 +29,6 @@ repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 "$repository_root/scripts/test-r.sh"
 
+"$repository_root/scripts/test-cli.sh"
+
 "$repository_root/scripts/test-conformance.sh"

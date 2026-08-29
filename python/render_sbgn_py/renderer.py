@@ -17,7 +17,7 @@ import cairo
 
 # Configuration constants
 DEFAULT_PADDING_PX = 50.0
-RENDERER_VERSION = "0.0.5"
+RENDERER_VERSION = "0.0.6"
 DEFAULT_LINE_WIDTH = 1.5
 FONT_FAMILY = "Liberation Sans"
 ARROW_SIZE = 8.0

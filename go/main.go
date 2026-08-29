@@ -37,7 +37,7 @@ const (
 	// SBGN coordinates are treated as CSS/SVG-like pixels. canvas itself uses
 	// millimeters/points for text APIs, so text sizes are converted separately.
 	defaultPaddingPx    = 50.0
-	rendererVersion     = "0.0.5"
+	rendererVersion     = "0.0.6"
 	fontFamilyName      = "Liberation Sans"
 	arrowSize           = 8.0
 	cytoscapeArrowScale = 4.53125
@@ -305,8 +305,58 @@ func usage() string {
 	return `render_sbgn_go renders SBGNML diagrams to PNG and SVG.
 
 Usage:
-  render_sbgn_go draw_sbgnml --input-path FILE [-o FILE.png|FILE.svg] [--format png,svg] [--padding 50] [--width PX] [--height PX] [--clone-markers true|false] [--glyph-colors JSON | --glyph-colors-json-file FILE | --style-json-file FILE] [--glyph-color-type label|id] [--auto-contrast-text true|false] [--generate-render-test-manifest]
+  render_sbgn_go draw_sbgnml [OPTIONS]
+
+Run "render_sbgn_go draw_sbgnml --help" for rendering options.
 `
+}
+
+// drawUsage returns help for the shared draw_sbgnml interface.
+func drawUsage() string {
+	return `Usage:
+  render_sbgn_go draw_sbgnml --input-path FILE [OPTIONS]
+
+Options:
+  -i, --input-path FILE             SBGNML input file.
+  -o, --output-path FILE            Output PNG or SVG path.
+  -f, --format FORMATS              Comma-separated formats (default: png,svg).
+  -p, --padding PX                  Diagram padding (default: 50).
+      --width PX                    Output width in pixels.
+      --height PX                   Output height in pixels.
+      --clone-markers BOOL          Enable or disable clone markers (default: true).
+      --no-clone-markers            Disable clone markers.
+      --glyph-colors JSON           Map glyph labels or IDs to CSS hex colors.
+      --glyph-colors-json-file FILE Read glyph colors from JSON.
+      --style-json-file FILE        Read renderer class styles from JSON.
+      --glyph-color-type TYPE       Color keys are label or id (default: label).
+      --auto-contrast-text BOOL     Adjust label contrast (default: true).
+      --no-auto-contrast-text       Disable automatic label contrast.
+      --generate-render-test-manifest
+                                    Write a render-test manifest instead of images.
+  -h, --help                        Show this help and exit.
+  -v, --version                     Show the version and exit.
+`
+}
+
+// boolValue parses the shared true/false syntax for renderer options.
+type boolValue struct {
+	target *bool
+}
+
+func (value boolValue) String() string {
+	return strconv.FormatBool(*value.target)
+}
+
+func (value boolValue) Set(raw string) error {
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		*value.target = true
+	case "0", "false", "no", "off":
+		*value.target = false
+	default:
+		return fmt.Errorf("invalid boolean value %q; use true or false", raw)
+	}
+	return nil
 }
 
 // runDrawSbgnml parses flags for the draw_sbgnml command and starts rendering.
@@ -319,14 +369,21 @@ func runDrawSbgnml(args []string) error {
 	var width float64
 	var height float64
 	var cloneMarkers bool
+	var noCloneMarkers bool
 	var autoContrastText bool
+	var noAutoContrastText bool
 	var generateRenderTestManifest bool
+	var showVersion bool
 	var glyphColorsJSON string
 	var glyphColorTypeRaw string
 	var glyphColorsJSONFile string
 	var styleJSONFile string
 
 	fs := flag.NewFlagSet("draw_sbgnml", flag.ContinueOnError)
+	fs.SetOutput(os.Stdout)
+	fs.Usage = func() {
+		fmt.Print(drawUsage())
+	}
 	fs.StringVar(&input, "input-path", "", "SBGNML input file")
 	fs.StringVar(&input, "input_path", "", "SBGNML input file")
 	fs.StringVar(&input, "input", "", "SBGNML input file")
@@ -341,12 +398,20 @@ func runDrawSbgnml(args []string) error {
 	fs.Float64Var(&padding, "p", defaultPaddingPx, "padding in output units")
 	fs.Float64Var(&width, "width", 0, "output width in pixels")
 	fs.Float64Var(&height, "height", 0, "output height in pixels")
-	fs.BoolVar(&cloneMarkers, "clone-markers", true, "draw clone markers")
-	fs.BoolVar(&cloneMarkers, "clone_markers", true, "draw clone markers")
-	fs.BoolVar(&autoContrastText, "auto-contrast-text", true, "auto-contrast glyph text against custom fill colors")
-	fs.BoolVar(&autoContrastText, "auto_contrast_text", true, "auto-contrast glyph text against custom fill colors")
+	cloneMarkers = true
+	fs.Var(boolValue{target: &cloneMarkers}, "clone-markers", "draw clone markers")
+	fs.Var(boolValue{target: &cloneMarkers}, "clone_markers", "draw clone markers")
+	fs.BoolVar(&noCloneMarkers, "no-clone-markers", false, "do not draw clone markers")
+	fs.BoolVar(&noCloneMarkers, "no_clone_markers", false, "do not draw clone markers")
+	autoContrastText = true
+	fs.Var(boolValue{target: &autoContrastText}, "auto-contrast-text", "auto-contrast glyph text against custom fill colors")
+	fs.Var(boolValue{target: &autoContrastText}, "auto_contrast_text", "auto-contrast glyph text against custom fill colors")
+	fs.BoolVar(&noAutoContrastText, "no-auto-contrast-text", false, "do not auto-contrast glyph text")
+	fs.BoolVar(&noAutoContrastText, "no_auto_contrast_text", false, "do not auto-contrast glyph text")
 	fs.BoolVar(&generateRenderTestManifest, "generate-render-test-manifest", false, "write render-test manifest JSON instead of images")
 	fs.BoolVar(&generateRenderTestManifest, "generate_render_test_manifest", false, "write render-test manifest JSON instead of images")
+	fs.BoolVar(&showVersion, "version", false, "show the version and exit")
+	fs.BoolVar(&showVersion, "v", false, "show the version and exit")
 	fs.StringVar(&glyphColorsJSON, "glyph-colors", "{}", "JSON object mapping glyph labels or ids to CSS hex colors")
 	fs.StringVar(&glyphColorsJSON, "glyph_colors", "{}", "JSON object mapping glyph labels or ids to CSS hex colors")
 	fs.StringVar(&glyphColorTypeRaw, "glyph-color-type", "label", "glyph color key type: label or id")
@@ -356,7 +421,20 @@ func runDrawSbgnml(args []string) error {
 	fs.StringVar(&styleJSONFile, "style-json-file", "", "JSON class style file")
 	fs.StringVar(&styleJSONFile, "style_json_file", "", "JSON class style file")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
+	}
+	if noCloneMarkers {
+		cloneMarkers = false
+	}
+	if noAutoContrastText {
+		autoContrastText = false
+	}
+	if showVersion {
+		fmt.Println(rendererVersion)
+		return nil
 	}
 	glyphColorsProvided := false
 	fs.Visit(func(flag *flag.Flag) {
