@@ -3,7 +3,7 @@
 
 # Configuration constants for layout and styling.
 DEFAULT_PADDING_PX <- 50
-RENDERER_VERSION <- "0.1.0"
+RENDERER_VERSION <- "0.0.5"
 FONT_MIN_PX <- 6
 FONT_BASE_PX <- 12
 FONT_FAMILY <- "Liberation Sans"
@@ -2476,7 +2476,7 @@ sbgnml_basic_render_manifest <- function(
         text = "",
         marker = "",
         source = points$glyph_id[1],
-        target = points$glyph_id[2]
+        target = points$glyph_id[end_index]
       ))
       if (!is.null(glyph$label) && nzchar(trimws(glyph$label))) {
         add_element(list(
@@ -2496,7 +2496,7 @@ sbgnml_basic_render_manifest <- function(
           text = glyph$label,
           marker = "",
           source = points$glyph_id[1],
-          target = points$glyph_id[2]
+          target = points$glyph_id[end_index]
         ))
       }
     }

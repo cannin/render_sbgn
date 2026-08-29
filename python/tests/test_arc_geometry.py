@@ -9,8 +9,13 @@ from render_sbgn_py.renderer import (
     Arc,
     BBox,
     Glyph,
+    JS_NODE_FILL_COLOR,
     Point,
+    Port,
+    auxiliary_glyph_shape,
     draw_js_marker,
+    js_arc_line_path,
+    js_arc_marker_point,
     js_arc_path,
 )
 
@@ -116,6 +121,105 @@ class ArcGeometryTests(unittest.TestCase):
 
         draw_bar.assert_called_once()
         self.assertAlmostEqual(draw_bar.call_args.args[3], 30.0)
+
+    def test_entity_names_select_auxiliary_shapes(self) -> None:
+        """Map unit-of-information entity names to their SBGN shapes."""
+
+        expected_shapes = {
+            "macromolecule": "round_rectangle",
+            "nucleic acid feature": "bottom_round_rectangle",
+            "complex": "complex",
+            "simple chemical": "stadium_round_rectangle",
+            "unspecified entity": "ellipse",
+            "perturbation": "perturbing_agent",
+        }
+        glyph = make_glyph("auxiliary", 0.0)
+        glyph.class_name = "unit of information"
+        glyph.parent_id = "parent"
+        for entity_name, expected_shape in expected_shapes.items():
+            with self.subTest(entity_name=entity_name):
+                glyph.entity_name = entity_name
+                self.assertEqual(auxiliary_glyph_shape(glyph), expected_shape)
+
+    def test_hollow_stimulation_marker_masks_underlying_line(self) -> None:
+        """Fill hollow stimulation markers with the node background."""
+
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 20, 20)
+        context = cairo.Context(surface)
+        with patch("render_sbgn_py.renderer.draw_marker_polygon") as draw_polygon:
+            draw_js_marker(
+                context,
+                "triangle",
+                "stimulation",
+                Point(10.0, 10.0),
+                Point(0.0, 10.0),
+                20.0,
+                (0.0, 0.0, 0.0),
+            )
+
+        self.assertEqual(
+            draw_polygon.call_args.kwargs["background_fill"], JS_NODE_FILL_COLOR
+        )
+
+    def test_triangle_marker_tip_overlaps_target_boundary(self) -> None:
+        """Move triangle tips into targets to avoid visible connection seams."""
+
+        arc = Arc(
+            id="arc",
+            class_name="stimulation",
+            source="source",
+            target="target",
+            points=[Point(0.0, 0.0), Point(10.0, 0.0)],
+        )
+
+        marker_point = js_arc_marker_point(arc, arc.points)
+
+        self.assertEqual(marker_point, Point(13.125, 0.0))
+
+    def test_arc_line_extends_to_process_port(self) -> None:
+        """Eliminate half-stroke seams at process and logical-node ports."""
+
+        self.source.class_name = "process"
+        self.source.ports = [Port(x=12.0, y=5.0, id="source.1")]
+        arc = Arc(
+            id="arc",
+            class_name="production",
+            source="source.1",
+            target="target",
+            points=[Point(12.625, 5.0), Point(30.0, 5.0)],
+        )
+
+        points = js_arc_line_path(
+            arc,
+            arc.points,
+            self.glyph_lookup,
+            {"source.1": "source"},
+        )
+
+        self.assertEqual(points[0], Point(12.0, 5.0))
+
+    def test_delay_arc_clips_to_painted_boundary(self) -> None:
+        """Remove the empty port gap around a delay glyph."""
+
+        self.source.class_name = "delay"
+        self.source.ports = [Port(x=5.0, y=-4.0, id="source.1")]
+        arc = Arc(
+            id="arc",
+            class_name="positive influence",
+            source="source.1",
+            target="target",
+            points=[Point(5.0, -4.0), Point(30.0, 5.0)],
+        )
+
+        resolved = js_arc_path(
+            arc,
+            self.glyph_lookup,
+            {"source.1": "source"},
+        )
+
+        self.assertIsNotNone(resolved)
+        points, _, _ = resolved
+        self.assertEqual(points[0], Point(5.0, -0.625))
 
 
 if __name__ == "__main__":

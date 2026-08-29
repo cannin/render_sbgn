@@ -1,5 +1,8 @@
 # Render all SBGN-ML examples to output_render_sbgn_r using base R graphics.
 
+suppressPackageStartupMessages(library(jsonlite))
+suppressPackageStartupMessages(library(xml2))
+
 arguments <- commandArgs(trailingOnly = FALSE)
 file_argument <- arguments[grepl("^--file=", arguments)]
 script_dir <- if (length(file_argument) == 0) {
@@ -9,14 +12,19 @@ script_dir <- if (length(file_argument) == 0) {
 }
 source(file.path(script_dir, "R", "draw_sbgnml.R"))
 
-INPUT_DIR <- "examples/sbgn"
-OUTPUT_DIR <- "output_render_sbgn_r"
+INPUT_DIR <- file.path(script_dir, "..", "render_examples")
+OUTPUT_DIR <- file.path(script_dir, "..", "tests", "output", "r")
 
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
-sbgn_files <- list.files(INPUT_DIR, pattern = "\\.sbgn$", full.names = TRUE)
+sbgn_files <- list.files(
+  INPUT_DIR,
+  pattern = "\\.sbgn$",
+  full.names = TRUE,
+  recursive = TRUE
+)
 if (length(sbgn_files) == 0) {
-  stop("No .sbgn files found in examples/sbgn")
+  stop("No .sbgn files found in the shared render_examples directory")
 }
 
 for (sbgn_file in sbgn_files) {

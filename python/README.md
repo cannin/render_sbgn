@@ -1,39 +1,35 @@
 # render_sbgn_py
 
-SBGNML renderer implemented in Python with a pycairo backend.
+Python SBGN-ML renderer using pycairo. Package version: 0.0.5.
+
+## Requirements and installation
+
+Python 3.10 or newer, Cairo, and uv are required. From this directory:
+
+```bash
+uv sync
+```
+
+If pycairo cannot find Cairo, install the platform's Cairo development package
+first.
 
 ## Usage
 
-Render a single SBGNML file (PNG + SVG):
-
 ```bash
-uv run python -m render_sbgn_py.cli draw_sbgnml \
-  --input /workspace/examples/sbgn/and.sbgn \
-  --output /workspace/output_render_sbgn_py/and.png
+uv run render_sbgn_py draw_sbgnml \
+  --input-path ../render_examples/sbgn_examples/colors.sbgn \
+  --output-path colors.png
 ```
 
-Render all examples (PNG + SVG):
+An explicit `.png` or `.svg` output path writes that format. Without an output
+path, `--format png,svg` writes both formats. Run `uv run render_sbgn_py --help`
+for styling, sizing, clone-marker, and manifest options.
+
+## Tests
 
 ```bash
-uv run python -m render_sbgn_py.cli render-examples \
-  --input-dir /workspace/examples/sbgn \
-  --output-dir /workspace/output_render_sbgn_py
+uv run --with pytest pytest
 ```
 
-## uvx usage
-
-Run the CLI directly with `uvx` from the repo:
-
-```bash
-uvx --from /workspace/render_sbgn_py render_sbgn_py --help
-uvx --from /workspace/render_sbgn_py render_sbgn_py draw_sbgnml \
-  --input /workspace/examples/sbgn/and.sbgn \
-  --output /workspace/output_render_sbgn_py/and.png
-```
-
-## Notes
-
-- SVG output is generated alongside PNG output using Cairo's SVG surface.
-- Font rendering expects Liberation Sans to be installed on the system.
-- If pycairo wheels are unavailable for your platform, install system Cairo
-  (e.g., `sudo apt-get install libcairo2` on Debian/Ubuntu) before running `uv sync`.
+Repository-wide conformance tests are run from the parent directory with
+`./scripts/test-conformance.sh`.

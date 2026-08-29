@@ -5,6 +5,9 @@
 
 # LOAD DATA ----
 
+suppressPackageStartupMessages(library(jsonlite))
+suppressPackageStartupMessages(library(xml2))
+
 arguments <- commandArgs(trailingOnly = FALSE)
 file_argument <- arguments[grepl("^--file=", arguments)]
 script_dir <- if (length(file_argument) == 0) {

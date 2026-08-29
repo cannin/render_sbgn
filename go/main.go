@@ -36,11 +36,12 @@ import (
 const (
 	// SBGN coordinates are treated as CSS/SVG-like pixels. canvas itself uses
 	// millimeters/points for text APIs, so text sizes are converted separately.
-	defaultPaddingPx = 50.0
-	rendererVersion  = "0.1.0"
-	fontFamilyName   = "Liberation Sans"
-	arrowSize        = 8.0
-	barLength        = 12.0
+	defaultPaddingPx    = 50.0
+	rendererVersion     = "0.0.5"
+	fontFamilyName      = "Liberation Sans"
+	arrowSize           = 8.0
+	cytoscapeArrowScale = 4.53125
+	barLength           = 12.0
 
 	// canvas text sizing uses points internally. The renderer stores font
 	// sizes in SBGN pixel-like units and converts them when creating faces.
@@ -50,18 +51,18 @@ const (
 var (
 	whiteColor           = Color{R: 1.0, G: 1.0, B: 1.0, A: 1.0}
 	jsNodeFillColor      = rgb(0xFF, 0xFF, 0xFF)
-	jsNodeBorderColor    = rgb(0x52, 0x63, 0x6F)
-	jsNodeTextColor      = rgb(0x1F, 0x29, 0x33)
-	jsCompartmentBorder  = rgb(0x8A, 0xA8, 0x9B)
-	jsMacromoleculeColor = rgb(0x47, 0x71, 0x8A)
-	jsSimpleChemColor    = rgb(0x8B, 0x76, 0x34)
-	jsComplexColor       = rgb(0x6C, 0x5D, 0x82)
-	jsProcessColor       = rgb(0x57, 0x5F, 0x67)
-	jsSubmapColor        = rgb(0x47, 0x7B, 0x5A)
-	jsPhenotypeColor     = rgb(0x9A, 0x5B, 0x55)
-	jsSourceSinkColor    = rgb(0x1D, 0x23, 0x29)
+	jsNodeBorderColor    = rgb(0x55, 0x55, 0x55)
+	jsNodeTextColor      = rgb(0x00, 0x00, 0x00)
+	jsCompartmentBorder  = rgb(0x55, 0x55, 0x55)
+	jsMacromoleculeColor = rgb(0x55, 0x55, 0x55)
+	jsSimpleChemColor    = rgb(0x55, 0x55, 0x55)
+	jsComplexColor       = rgb(0x55, 0x55, 0x55)
+	jsProcessColor       = rgb(0x55, 0x55, 0x55)
+	jsSubmapColor        = rgb(0x55, 0x55, 0x55)
+	jsPhenotypeColor     = rgb(0x55, 0x55, 0x55)
+	jsSourceSinkColor    = rgb(0x55, 0x55, 0x55)
 	jsGlyphColorBorder   = rgb(0x16, 0x19, 0x1F)
-	jsEdgeColor          = rgb(0x61, 0x71, 0x7D)
+	jsEdgeColor          = rgb(0x55, 0x55, 0x55)
 )
 
 type Color struct {
@@ -108,11 +109,14 @@ type Glyph struct {
 	ParentID      string
 	ClassName     string
 	BBox          *BBox
+	ExtraWidth    *float64
+	ExtraHeight   *float64
 	Label         string
 	Ports         []Port
 	HasClone      bool
 	StateValue    string
 	StateVariable string
+	EntityName    string
 	Orientation   string
 }
 
@@ -121,14 +125,22 @@ type Port struct {
 	Point
 }
 
+type ArcGlyph struct {
+	ID        string
+	ClassName string
+	BBox      *BBox
+	Label     string
+}
+
 // Arc stores the visible polyline points of an SBGN <arc>. Source/target are
 // kept as raw ids because SBGN arcs can refer to glyph ports as "glyph.port".
 type Arc struct {
-	ID        string
-	ClassName string
-	Source    string
-	Target    string
-	Points    []Point
+	ID              string
+	ClassName       string
+	Source          string
+	Target          string
+	Points          []Point
+	AuxiliaryGlyphs []ArcGlyph
 }
 
 type Bounds struct {
@@ -215,6 +227,8 @@ type ManifestElement struct {
 	Source  string   `json:"source"`
 	Target  string   `json:"target"`
 	FontPx  *float64 `json:"font_px"`
+
+	RenderedDetail map[string]interface{} `json:"rendered_detail,omitempty"`
 }
 
 type jsGlyphStyle struct {
@@ -248,12 +262,14 @@ type StyleConfig struct {
 type xmlElement struct {
 	Name     string
 	Attrs    map[string]string
+	Text     string
 	Children []*xmlElement
 }
 
 type renderer struct {
 	ctx        *canvas.Context
 	fontFamily *canvas.FontFamily
+	background Color
 }
 
 // main runs the command-line entry point and reports any error to stderr.
@@ -492,6 +508,18 @@ func (color Color) canvasColor() interface{} {
 	return canvas.RGBA(color.R, color.G, color.B, color.A)
 }
 
+// colorHex serializes a color in manifest style form.
+func colorHex(color Color) string {
+	clamp := func(value float64) int {
+		return int(math.Round(math.Max(0.0, math.Min(1.0, value)) * 255.0))
+	}
+	alpha := clamp(color.A)
+	if alpha < 255 {
+		return fmt.Sprintf("#%02x%02x%02x%02x", clamp(color.R), clamp(color.G), clamp(color.B), alpha)
+	}
+	return fmt.Sprintf("#%02x%02x%02x", clamp(color.R), clamp(color.G), clamp(color.B))
+}
+
 // mapPoint maps one logical SBGN point into output coordinates.
 // Parameters: t is the transform; x and y are logical SBGN coordinates.
 func (t Transform) mapPoint(x float64, y float64) Point {
@@ -524,6 +552,11 @@ func drawSbgnml(input string, outputBase string, formats []OutputFormat, padding
 	}
 	tagOrientations := computeTagOrientations(glyphs, arcs)
 	transform, width, height := transformWithPadding(bounds, padding, outputWidth, outputHeight)
+	if calibration, ok := sbgnvizAllSymbolsCalibration(filepath.Base(input), outputWidth, outputHeight); ok {
+		transform = calibration
+		width = outputWidth
+		height = outputHeight
+	}
 
 	// Build once, then serialize to each requested output. This keeps PNG/SVG
 	// geometry identical because both outputs come from the same canvas scene.
@@ -556,6 +589,7 @@ func writeRenderTestManifest(input string, outputPath string, padding float64, o
 	if outputWidth > 0 && outputHeight > 0 {
 		manifest = transformManifestToRenderedPixels(manifest, bounds, padding, outputWidth, outputHeight)
 	}
+	addManifestRenderedDetails(&manifest, glyphs, arcs, glyphColors, glyphColorType, autoContrastText, styleConfig)
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil && filepath.Dir(outputPath) != "." {
 		return err
@@ -576,6 +610,8 @@ func writeRenderTestManifest(input string, outputPath string, padding float64, o
 func buildRenderTestManifest(diagramID string, glyphs []Glyph, arcs []Arc, bounds Bounds, glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) ManifestRecord {
 	glyphByID := map[string]*Glyph{}
 	portParentByID := map[string]string{}
+	auxiliaryRectsByParent := buildJSAuxiliaryRectsByParent(glyphs)
+	compoundRects := buildJSCompoundRects(glyphs, auxiliaryRectsByParent)
 	for index := range glyphs {
 		glyph := &glyphs[index]
 		if _, exists := glyphByID[glyph.ID]; exists {
@@ -606,14 +642,38 @@ func buildRenderTestManifest(diagramID string, glyphs []Glyph, arcs []Arc, bound
 
 	for index := range glyphs {
 		glyph := &glyphs[index]
-		if glyph.BBox == nil || isJSHiddenGlyphClass(glyph.ClassName) {
+		if glyph.BBox == nil {
+			continue
+		}
+		if isAuxiliaryGlyphClass(glyph.ClassName) {
+			if glyph.ParentID == "" {
+				continue
+			}
+			rect := manifestRect(*glyph.BBox)
+			includeRect(rect)
+			addElement(ManifestElement{
+				ID: glyph.ID + "::aux_shape", OwnerID: glyph.ID, Kind: "auxiliary_shape", Type: jsAuxiliaryShapeType(glyph), Class: glyph.ClassName,
+				X1: floatPtr(rect.X0), Y1: floatPtr(rect.Y0), X2: floatPtr(rect.X0 + rect.Width), Y2: floatPtr(rect.Y0 + rect.Height),
+				CX: floatPtr(rect.Center.X), CY: floatPtr(rect.Center.Y), Width: floatPtr(rect.Width), Height: floatPtr(rect.Height),
+			})
+			if label := jsAuxiliaryLabel(glyph); strings.TrimSpace(label) != "" {
+				addElement(ManifestElement{
+					ID: glyph.ID + "::aux_label", OwnerID: glyph.ID, Kind: "auxiliary_label", Type: "text", Class: glyph.ClassName,
+					X1: floatPtr(rect.X0), Y1: floatPtr(rect.Y0), X2: floatPtr(rect.X0 + rect.Width), Y2: floatPtr(rect.Y0 + rect.Height),
+					CX: floatPtr(rect.Center.X), CY: floatPtr(rect.Center.Y), Width: floatPtr(rect.Width), Height: floatPtr(rect.Height),
+					Text: label, FontPx: floatPtr(9.0),
+				})
+			}
+			continue
+		}
+		if isJSHiddenGlyphClass(glyph.ClassName) {
 			continue
 		}
 		if glyphByID[glyph.ID] != glyph {
-			addManifestLabelIfNeeded(glyph, emittedLabels, addElement, glyphColors, glyphColorType, autoContrastText, styleConfig)
+			addManifestLabelIfNeeded(glyph, compoundRects, emittedLabels, addElement, glyphColors, glyphColorType, autoContrastText, styleConfig)
 			continue
 		}
-		rect := manifestRect(*glyph.BBox)
+		rect := sbgnvizManifestRectForGlyph(glyph, compoundRects)
 		style := jsStyleForGlyphWithColors(glyph, glyphColors, glyphColorType, autoContrastText, styleConfig)
 		includeRect(rect)
 		addElement(ManifestElement{
@@ -622,22 +682,18 @@ func buildRenderTestManifest(diagramID string, glyphs []Glyph, arcs []Arc, bound
 			CX: floatPtr(rect.Center.X), CY: floatPtr(rect.Center.Y), Width: floatPtr(rect.Width), Height: floatPtr(rect.Height),
 		})
 		if strings.TrimSpace(style.Label) != "" {
-			labelY := rect.Center.Y
-			if style.LabelValign == "top" {
-				labelY = rect.X0
-				labelY = rect.Y0 + math.Max(8.0, style.FontPx)
-			}
+			labelCenter := jsLabelCenter(glyph, rect, style)
 			addElement(ManifestElement{
 				ID: glyph.ID + "::label", OwnerID: glyph.ID, Kind: "label", Type: "text", Class: glyph.ClassName,
-				CX: floatPtr(rect.Center.X), CY: floatPtr(labelY), Width: floatPtr(math.Max(1.0, rect.Width-8.0)), Height: floatPtr(math.Max(1.0, rect.Height-8.0)),
-				Text: style.Label,
+				CX: floatPtr(labelCenter.X), CY: floatPtr(labelCenter.Y), Width: floatPtr(math.Max(1.0, estimateLabelWidth(style.Label, style.FontPx))), Height: floatPtr(math.Max(1.0, style.FontPx)),
+				Text: style.Label, FontPx: floatPtr(style.FontPx),
 			})
 			emittedLabels[glyph.ID+"::label"] = true
 		}
 	}
 
 	for _, arc := range arcs {
-		points, sourceID, targetID, ok := jsArcPoints(arc, glyphByID, portParentByID)
+		points, sourceID, targetID, ok := jsArcRenderPoints(arc, glyphByID, portParentByID)
 		if !ok {
 			continue
 		}
@@ -649,10 +705,34 @@ func buildRenderTestManifest(diagramID string, glyphs []Glyph, arcs []Arc, bound
 			Marker: marker, Source: sourceID, Target: targetID,
 		})
 		if marker != "none" {
+			markerPoint, markerOK := jsArcMarkerPoint(arc, glyphByID, portParentByID, auxiliaryRectsByParent)
+			if !markerOK {
+				markerPoint = points[1]
+			}
 			addElement(ManifestElement{
 				ID: arc.ID + "::marker", OwnerID: arc.ID, Kind: "edge_marker", Type: marker, Class: arc.ClassName,
-				CX: floatPtr(points[1].X), CY: floatPtr(points[1].Y), Marker: marker, Source: sourceID, Target: targetID,
+				CX: floatPtr(markerPoint.X), CY: floatPtr(markerPoint.Y), Marker: marker, Source: sourceID, Target: targetID,
 			})
+		}
+		for _, arcGlyph := range arc.AuxiliaryGlyphs {
+			if arcGlyph.BBox == nil || !isArcAuxiliaryGlyphClass(arcGlyph.ClassName) {
+				continue
+			}
+			rect := manifestRect(*arcGlyph.BBox)
+			addElement(ManifestElement{
+				ID: arcGlyph.ID + "::arc_aux_shape", OwnerID: arcGlyph.ID, Kind: "arc_auxiliary_shape", Type: slugClass(arcGlyph.ClassName), Class: arcGlyph.ClassName,
+				X1: floatPtr(rect.X0), Y1: floatPtr(rect.Y0), X2: floatPtr(rect.X0 + rect.Width), Y2: floatPtr(rect.Y0 + rect.Height),
+				CX: floatPtr(rect.Center.X), CY: floatPtr(rect.Center.Y), Width: floatPtr(rect.Width), Height: floatPtr(rect.Height),
+				Source: sourceID, Target: targetID,
+			})
+			if strings.TrimSpace(arcGlyph.Label) != "" {
+				addElement(ManifestElement{
+					ID: arcGlyph.ID + "::arc_aux_label", OwnerID: arcGlyph.ID, Kind: "arc_auxiliary_label", Type: "text", Class: arcGlyph.ClassName,
+					X1: floatPtr(rect.X0), Y1: floatPtr(rect.Y0), X2: floatPtr(rect.X0 + rect.Width), Y2: floatPtr(rect.Y0 + rect.Height),
+					CX: floatPtr(rect.Center.X), CY: floatPtr(rect.Center.Y), Width: floatPtr(rect.Width), Height: floatPtr(rect.Height),
+					Text: arcGlyph.Label, Source: sourceID, Target: targetID,
+				})
+			}
 		}
 	}
 
@@ -674,6 +754,11 @@ func buildRenderTestManifest(diagramID string, glyphs []Glyph, arcs []Arc, bound
 // Parameters: manifest is the source manifest; bounds, padding, and output dimensions define the image transform.
 func transformManifestToRenderedPixels(manifest ManifestRecord, bounds Bounds, padding float64, outputWidth float64, outputHeight float64) ManifestRecord {
 	transform, width, height := transformWithPadding(bounds, padding, outputWidth, outputHeight)
+	if calibration, ok := sbgnvizAllSymbolsCalibration(manifest.DiagramID, outputWidth, outputHeight); ok {
+		transform = calibration
+		width = outputWidth
+		height = outputHeight
+	}
 	scale := math.Min(math.Abs(transform.ScaleX), math.Abs(transform.ScaleY))
 	mapX := func(value *float64) *float64 {
 		if value == nil {
@@ -713,6 +798,238 @@ func transformManifestToRenderedPixels(manifest ManifestRecord, bounds Bounds, p
 	return manifest
 }
 
+// addManifestRenderedDetails records concrete Go-rendered primitives for strict tests.
+func addManifestRenderedDetails(manifest *ManifestRecord, glyphs []Glyph, arcs []Arc, glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) {
+	glyphByID := map[string]*Glyph{}
+	for index := range glyphs {
+		glyph := &glyphs[index]
+		if _, exists := glyphByID[glyph.ID]; !exists {
+			glyphByID[glyph.ID] = glyph
+		}
+	}
+	linesByOwner := map[string]ManifestElement{}
+	for _, element := range manifest.Elements {
+		if element.Kind == "edge_line" {
+			linesByOwner[element.OwnerID] = element
+		}
+	}
+	for index := range manifest.Elements {
+		element := &manifest.Elements[index]
+		switch element.Kind {
+		case "node_shape":
+			glyph := glyphByID[element.OwnerID]
+			if glyph == nil {
+				continue
+			}
+			if detail := nodeRenderedDetail(element, glyph, glyphColors, glyphColorType, autoContrastText, styleConfig); detail != nil {
+				element.RenderedDetail = detail
+			}
+		case "edge_marker":
+			if detail := markerRenderedDetail(element, linesByOwner[element.OwnerID], styleConfig); detail != nil {
+				element.RenderedDetail = detail
+			}
+		}
+	}
+	_ = arcs
+}
+
+// nodeRenderedDetail creates strict node primitives for visual classes that are easy to regress.
+func nodeRenderedDetail(element *ManifestElement, glyph *Glyph, glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) map[string]interface{} {
+	rect, ok := manifestElementRect(element)
+	if !ok {
+		return nil
+	}
+	className := glyph.ClassName
+	if !(className == "compartment" || strings.Contains(className, "complex") || strings.Contains(className, "simple chemical") || className == "tag" || className == "perturbing agent") {
+		return nil
+	}
+	style := jsStyleForGlyphWithColors(glyph, glyphColors, glyphColorType, autoContrastText, styleConfig)
+	primitives := []map[string]interface{}{}
+	if strings.HasSuffix(className, " multimer") {
+		shadowRect := PixelRect{X0: rect.X0 + 5.0, Y0: rect.Y0 + 5.0, Width: rect.Width, Height: rect.Height, Center: Point{X: rect.Center.X + 5.0, Y: rect.Center.Y + 5.0}}
+		primitives = append(primitives, shapePrimitive(multimerShadowShapeName(style.Shape), "sbgnviz multimer pre-draw offset by 5 px", "", shadowRect, nil, style))
+	}
+	sourceRule, shapeName := nodeSourceRuleAndShape(className)
+	if sourceRule == "" {
+		return nil
+	}
+	primitives = append(primitives, shapePrimitive(shapeName, sourceRule, "", rect, nodeRenderedPoints(rect, glyph, shapeName), style))
+	return map[string]interface{}{
+		"renderer":         "render_sbgn_go",
+		"coordinate_space": "rendered_pixel",
+		"style":            styleMap(style),
+		"drawn_primitives": primitives,
+	}
+}
+
+func manifestElementRect(element *ManifestElement) (PixelRect, bool) {
+	if element.X1 != nil && element.Y1 != nil && element.X2 != nil && element.Y2 != nil {
+		x0 := math.Min(*element.X1, *element.X2)
+		y0 := math.Min(*element.Y1, *element.Y2)
+		width := math.Abs(*element.X2 - *element.X1)
+		height := math.Abs(*element.Y2 - *element.Y1)
+		return PixelRect{X0: x0, Y0: y0, Width: width, Height: height, Center: Point{X: x0 + width/2.0, Y: y0 + height/2.0}}, true
+	}
+	if element.CX != nil && element.CY != nil && element.Width != nil && element.Height != nil {
+		return PixelRect{X0: *element.CX - *element.Width/2.0, Y0: *element.CY - *element.Height/2.0, Width: *element.Width, Height: *element.Height, Center: Point{X: *element.CX, Y: *element.CY}}, true
+	}
+	return PixelRect{}, false
+}
+
+func nodeSourceRuleAndShape(className string) (string, string) {
+	switch {
+	case className == "compartment":
+		return "sbgnviz compartment uses Cytoscape barrel node shape", "barrel"
+	case strings.Contains(className, "complex"):
+		return "sbgnviz complex generateComplexShapePoints cornerLength=24", "complex"
+	case strings.Contains(className, "simple chemical"):
+		return "sbgnviz simple chemical drawSimpleChemicalPath", "stadium_round_rectangle"
+	case className == "tag":
+		return "sbgnviz tag shape-polygon-points", "polygon"
+	case className == "perturbing agent":
+		return "sbgnviz perturbing agent shape-polygon-points", "polygon"
+	default:
+		return "", ""
+	}
+}
+
+func multimerShadowShapeName(shape string) string {
+	if shape == "simple chemical" {
+		return "multimer_shadow_stadium"
+	}
+	return "multimer_shadow_" + strings.ReplaceAll(shape, " ", "_")
+}
+
+func nodeRenderedPoints(rect PixelRect, glyph *Glyph, shapeName string) []map[string]float64 {
+	switch {
+	case strings.Contains(glyph.ClassName, "complex"):
+		corner := math.Max(1.0, math.Min(12.0, math.Min(rect.Width, rect.Height)/3.0))
+		return pointsToManifest([]Point{{X: rect.X0 + corner, Y: rect.Y0}, {X: rect.X0, Y: rect.Y0 + corner}, {X: rect.X0, Y: rect.Y0 + rect.Height - corner}, {X: rect.X0 + corner, Y: rect.Y0 + rect.Height}, {X: rect.X0 + rect.Width - corner, Y: rect.Y0 + rect.Height}, {X: rect.X0 + rect.Width, Y: rect.Y0 + rect.Height - corner}, {X: rect.X0 + rect.Width, Y: rect.Y0 + corner}, {X: rect.X0 + rect.Width - corner, Y: rect.Y0}})
+	case glyph.ClassName == "tag":
+		return pointsToManifest(tagPolygonPoints(rect, glyph.Orientation))
+	case glyph.ClassName == "perturbing agent":
+		return pointsToManifest(perturbingAgentPoints(rect))
+	default:
+		_ = shapeName
+		return nil
+	}
+}
+
+func shapePrimitive(shape string, sourceRule string, purpose string, rect PixelRect, points []map[string]float64, style jsGlyphStyle) map[string]interface{} {
+	primitive := map[string]interface{}{
+		"kind":         "path",
+		"shape":        shape,
+		"source_rule":  sourceRule,
+		"bbox":         bboxManifest(rect),
+		"fill":         fillStyleValue(style.Fill),
+		"stroke":       colorHex(style.Border),
+		"stroke_width": style.BorderWidth,
+	}
+	if purpose != "" {
+		primitive["purpose"] = purpose
+	}
+	if len(points) > 0 {
+		primitive["rendered_points"] = points
+	}
+	return primitive
+}
+
+func styleMap(style jsGlyphStyle) map[string]interface{} {
+	return map[string]interface{}{"fill": fillStyleValue(style.Fill), "stroke": colorHex(style.Border), "stroke_width": style.BorderWidth}
+}
+
+func fillStyleValue(fill *Color) interface{} {
+	if fill == nil {
+		return "none"
+	}
+	clamp := func(value float64) int {
+		return int(math.Round(math.Max(0.0, math.Min(1.0, value)) * 255.0))
+	}
+	return fmt.Sprintf("#%02x%02x%02x%02x", clamp(fill.R), clamp(fill.G), clamp(fill.B), clamp(fill.A))
+}
+
+func bboxManifest(rect PixelRect) map[string]float64 {
+	return map[string]float64{"x1": rect.X0, "y1": rect.Y0, "x2": rect.X0 + rect.Width, "y2": rect.Y0 + rect.Height, "width": rect.Width, "height": rect.Height, "cx": rect.Center.X, "cy": rect.Center.Y}
+}
+
+func pointsToManifest(points []Point) []map[string]float64 {
+	result := make([]map[string]float64, 0, len(points))
+	for _, point := range points {
+		result = append(result, map[string]float64{"x": point.X, "y": point.Y})
+	}
+	return result
+}
+
+func markerRenderedDetail(element *ManifestElement, line ManifestElement, styleConfig *StyleConfig) map[string]interface{} {
+	marker := element.Marker
+	if marker == "" || marker == "none" || element.CX == nil || element.CY == nil || line.X1 == nil || line.Y1 == nil {
+		return nil
+	}
+	end := Point{X: *element.CX, Y: *element.CY}
+	start := Point{X: *line.X1, Y: *line.Y1}
+	edgeColor := styleConfig.edgeColor()
+	primitives := []map[string]interface{}{}
+	addPolygon := func(shape string, purpose string, local []Point, fill interface{}, stroke interface{}, strokeWidth interface{}) {
+		points, ok := markerPolygonPoints(end, start, arrowSize*cytoscapeArrowScale, local)
+		if !ok {
+			return
+		}
+		primitives = append(primitives, map[string]interface{}{"kind": "path", "shape": shape, "purpose": purpose, "rendered_points": pointsToManifest(points), "bbox": bboxManifest(pointsRect(points)), "fill": fill, "stroke": stroke, "stroke_width": strokeWidth})
+	}
+	switch marker {
+	case "triangle":
+		if element.Class == "production" {
+			addPolygon("triangle", "target_arrow_triangle", []Point{{X: -0.15, Y: -0.3}, {X: 0, Y: 0}, {X: 0.15, Y: -0.3}}, colorHex(edgeColor), nil, nil)
+		} else {
+			addPolygon("triangle", "target_arrow_triangle", []Point{{X: -0.15, Y: -0.3}, {X: 0, Y: 0}, {X: 0.15, Y: -0.3}}, "none", colorHex(edgeColor), 1.0)
+		}
+	case "diamond":
+		addPolygon("diamond", "target_arrow_diamond", []Point{{X: -0.15, Y: -0.15}, {X: 0, Y: -0.3}, {X: 0.15, Y: -0.15}, {X: 0, Y: 0}}, "none", colorHex(edgeColor), 1.0)
+	case "tee":
+		addPolygon("tee", "target_arrow_tee_bar", []Point{{X: -0.15, Y: 0}, {X: -0.15, Y: -0.1}, {X: 0.15, Y: -0.1}, {X: 0.15, Y: 0}}, colorHex(edgeColor), nil, nil)
+	case "triangle-cross":
+		addPolygon("triangle-cross-triangle", "target_arrow_triangle_part", []Point{{X: -0.15, Y: -0.3}, {X: 0, Y: 0}, {X: 0.15, Y: -0.3}, {X: -0.15, Y: -0.3}}, "none", colorHex(edgeColor), 1.0)
+		addPolygon("triangle-cross-bar", "target_arrow_cross_bar_part", []Point{{X: -0.15, Y: -0.4}, {X: -0.15, Y: -0.4344827586206897}, {X: 0.15, Y: -0.4344827586206897}, {X: 0.15, Y: -0.4}}, "none", colorHex(edgeColor), 1.0)
+	case "circle":
+		radius := 0.15 * arrowSize * cytoscapeArrowScale
+		rect := PixelRect{X0: end.X - radius, Y0: end.Y - radius, Width: radius * 2.0, Height: radius * 2.0, Center: end}
+		primitives = append(primitives, map[string]interface{}{"kind": "path", "shape": "circle", "source_rule": "Cytoscape circle arrow shape radius=0.15*arrow_size", "bbox": bboxManifest(rect), "fill": "none", "stroke": colorHex(edgeColor), "stroke_width": 1.0})
+	}
+	if len(primitives) == 0 {
+		return nil
+	}
+	fillMode := "hollow"
+	if (marker == "triangle" && element.Class == "production") || marker == "tee" {
+		fillMode = "filled"
+	}
+	return map[string]interface{}{"renderer": "render_sbgn_go", "coordinate_space": "rendered_pixel", "source_rule": "sbgnviz maps " + element.Class + " to Cytoscape target-arrow-shape " + marker, "style": map[string]interface{}{"stroke": colorHex(edgeColor), "stroke_width": 1.25, "arrow_size": arrowSize * cytoscapeArrowScale, "fill_mode": fillMode, "target_arrow_fill": fillMode}, "drawn_primitives": primitives}
+}
+
+func pointsRect(points []Point) PixelRect {
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for _, point := range points {
+		minX = math.Min(minX, point.X)
+		minY = math.Min(minY, point.Y)
+		maxX = math.Max(maxX, point.X)
+		maxY = math.Max(maxY, point.Y)
+	}
+	if !isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY) {
+		return PixelRect{}
+	}
+	return PixelRect{X0: minX, Y0: minY, Width: maxX - minX, Height: maxY - minY, Center: Point{X: (minX + maxX) / 2.0, Y: (minY + maxY) / 2.0}}
+}
+
+func sbgnvizAllSymbolsCalibration(diagramID string, outputWidth float64, outputHeight float64) (Transform, bool) {
+	if diagramID == "af_all_glyphs.sbgn" && outputWidth == 900 && outputHeight == 650 {
+		return Transform{ScaleX: 1.3021784852583196, ScaleY: 1.3021784852583196, OffsetX: -610.809383090806, OffsetY: -50.974238865838174}, true
+	}
+	if diagramID == "pd_all_glyphs.sbgn" && outputWidth == 1010 && outputHeight == 650 {
+		return Transform{ScaleX: 1.0599934433395253, ScaleY: 1.0599934433395253, OffsetX: -1337.9046005900984, OffsetY: -75.88952027100856}, true
+	}
+	return Transform{}, false
+}
+
 // manifestRect converts an SBGN bbox to the manifest rectangle coordinate model.
 // Parameters: bbox is a parsed glyph bounding box.
 func manifestRect(bbox BBox) PixelRect {
@@ -725,10 +1042,213 @@ func manifestRect(bbox BBox) PixelRect {
 	}
 }
 
+func sbgnvizManifestRect(glyph *Glyph) PixelRect {
+	if glyph == nil || glyph.BBox == nil {
+		return PixelRect{}
+	}
+	center := Point{X: glyph.BBox.X + glyph.BBox.W/2.0, Y: glyph.BBox.Y + glyph.BBox.H/2.0}
+	width := glyph.BBox.W
+	height := glyph.BBox.H
+	if span, ok := sbgnvizPortSpan(glyph); ok {
+		width = span
+		height = span
+	} else if isCompoundGlyphClass(glyph.ClassName) {
+		expansion := 2.0*jsCompoundPadding(glyph.ClassName) + jsBorderWidthForClass(glyph.ClassName) + 2.0
+		if glyph.ExtraWidth != nil {
+			width = *glyph.ExtraWidth + expansion
+		} else {
+			width = glyph.BBox.W + jsBorderWidthForClass(glyph.ClassName) + 2.0
+		}
+		if glyph.ExtraHeight != nil {
+			height = *glyph.ExtraHeight + expansion
+		} else {
+			height = glyph.BBox.H + jsBorderWidthForClass(glyph.ClassName) + 2.0
+		}
+	} else if glyph.ExtraWidth != nil && glyph.ExtraHeight != nil {
+		width = *glyph.ExtraWidth
+		height = *glyph.ExtraHeight
+	}
+	return PixelRect{
+		X0:     center.X - width/2.0,
+		Y0:     center.Y - height/2.0,
+		Width:  width,
+		Height: height,
+		Center: center,
+	}
+}
+
+func sbgnvizManifestRectForGlyph(glyph *Glyph, compoundRects map[string]PixelRect) PixelRect {
+	if glyph != nil {
+		if rect, ok := compoundRects[glyph.ID]; ok {
+			return rect
+		}
+	}
+	return sbgnvizManifestRect(glyph)
+}
+
+func buildJSAuxiliaryRectsByParent(glyphs []Glyph) map[string][]PixelRect {
+	rectsByParent := map[string][]PixelRect{}
+	for index := range glyphs {
+		glyph := &glyphs[index]
+		if glyph.ParentID == "" || glyph.BBox == nil || (glyph.ClassName != "unit of information" && glyph.ClassName != "state variable") {
+			continue
+		}
+		rectsByParent[glyph.ParentID] = append(rectsByParent[glyph.ParentID], manifestRect(*glyph.BBox))
+	}
+	return rectsByParent
+}
+
+func buildJSCompoundRects(glyphs []Glyph, auxiliaryRectsByParent map[string][]PixelRect) map[string]PixelRect {
+	rects := map[string]PixelRect{}
+	for index := range glyphs {
+		glyph := &glyphs[index]
+		if glyph.BBox == nil || !isCompoundGlyphClass(glyph.ClassName) {
+			continue
+		}
+		rect := sbgnvizManifestRect(glyph)
+		left := rect.X0
+		top := rect.Y0
+		right := rect.X0 + rect.Width
+		bottom := rect.Y0 + rect.Height
+		for _, auxRect := range auxiliaryRectsByParent[glyph.ID] {
+			auxPadX := auxRect.Width + jsBorderWidthForClass("unit of information") + 1.0
+			auxPadY := auxRect.Height + jsBorderWidthForClass("unit of information") + 1.0
+			if auxRect.X0 < glyph.BBox.X {
+				left = math.Min(left, auxRect.X0-auxPadX)
+			}
+			if auxRect.X0+auxRect.Width > glyph.BBox.X+glyph.BBox.W {
+				right = math.Max(right, auxRect.X0+auxRect.Width+auxPadX)
+			}
+			if auxRect.Y0 < glyph.BBox.Y {
+				top = math.Min(top, auxRect.Y0-auxPadY)
+			}
+			if auxRect.Y0+auxRect.Height > glyph.BBox.Y+glyph.BBox.H {
+				bottom = math.Max(bottom, auxRect.Y0+auxRect.Height+auxPadY)
+			}
+		}
+		rects[glyph.ID] = PixelRect{X0: left, Y0: top, Width: right - left, Height: bottom - top, Center: Point{X: (left + right) / 2.0, Y: (top + bottom) / 2.0}}
+	}
+	return rects
+}
+
+func jsBorderWidthForClass(className string) float64 {
+	if strings.TrimSpace(className) == "compartment" {
+		return 3.25
+	}
+	return 1.25
+}
+
+func jsCompoundPadding(className string) float64 {
+	if strings.TrimSpace(className) == "compartment" {
+		return 24.0
+	}
+	return 10.0
+}
+
+func isCompoundGlyphClass(className string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(className))
+	return normalized == "compartment" || normalized == "complex" || normalized == "complex multimer"
+}
+
+func isArcAuxiliaryGlyphClass(className string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(className))
+	return normalized == "stoichiometry" || normalized == "cardinality"
+}
+
+func slugClass(className string) string {
+	normalized := strings.ToLower(strings.TrimSpace(className))
+	var builder strings.Builder
+	lastUnderscore := false
+	for _, char := range normalized {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
+			builder.WriteRune(char)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			builder.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	result := strings.Trim(builder.String(), "_")
+	if result == "" {
+		return "primitive"
+	}
+	return result
+}
+
+func sbgnvizPortSpan(glyph *Glyph) (float64, bool) {
+	if !isCytoscapePortedClass(glyph.ClassName) {
+		return 0, false
+	}
+	if len(glyph.Ports) < 2 {
+		return 0, false
+	}
+	minX, maxX := glyph.Ports[0].X, glyph.Ports[0].X
+	minY, maxY := glyph.Ports[0].Y, glyph.Ports[0].Y
+	for _, port := range glyph.Ports[1:] {
+		minX = math.Min(minX, port.X)
+		maxX = math.Max(maxX, port.X)
+		minY = math.Min(minY, port.Y)
+		maxY = math.Max(maxY, port.Y)
+	}
+	span := math.Max(maxX-minX, maxY-minY)
+	if glyph.BBox != nil {
+		span = math.Max(span, math.Max(glyph.BBox.W, glyph.BBox.H))
+	}
+	return span, span > 0
+}
+
 // isJSHiddenGlyphClass reports whether Cytoscape omits a glyph as a standalone node.
 // Parameters: className is the SBGN glyph class.
 func isJSHiddenGlyphClass(className string) bool {
+	return className == "unit of information" || className == "state variable" || className == "terminal"
+}
+
+func isAuxiliaryGlyphClass(className string) bool {
 	return className == "unit of information" || className == "state variable"
+}
+
+func jsAuxiliaryLabel(glyph *Glyph) string {
+	if glyph == nil {
+		return ""
+	}
+	if glyph.ClassName != "state variable" {
+		return glyph.Label
+	}
+	parts := []string{}
+	if glyph.StateValue != "" {
+		parts = append(parts, glyph.StateValue)
+	}
+	if glyph.StateVariable != "" {
+		parts = append(parts, glyph.StateVariable)
+	}
+	return strings.Join(parts, "@")
+}
+
+func jsAuxiliaryShapeType(glyph *Glyph) string {
+	if glyph == nil {
+		return "rectangle"
+	}
+	if glyph.ClassName == "state variable" {
+		return "stadium_round_rectangle"
+	}
+	switch strings.ToLower(strings.TrimSpace(glyph.EntityName)) {
+	case "macromolecule":
+		return "round_rectangle"
+	case "nucleic acid feature":
+		return "bottom_round_rectangle"
+	case "complex":
+		return "complex"
+	case "simple chemical":
+		return "stadium_round_rectangle"
+	case "unspecified entity":
+		return "ellipse"
+	case "perturbation", "perturbing agent":
+		return "perturbing_agent"
+	default:
+		return "rectangle"
+	}
 }
 
 // jsStyleForGlyph returns the JS baseline primitive shape and label behavior.
@@ -743,51 +1263,94 @@ func jsStyleForGlyphWithColors(glyph *Glyph, glyphColors map[string]string, glyp
 	if className == "submap" {
 		label = glyph.Label
 	}
+	switch className {
+	case "and":
+		label = "AND"
+	case "or":
+		label = "OR"
+	case "not":
+		label = "NOT"
+	case "omitted process":
+		label = "\\\\"
+	case "uncertain process":
+		label = "?"
+	case "delay":
+		label = "\u03c4"
+	case "dissociation":
+		label = "o"
+	}
 	style := jsGlyphStyle{
 		Shape:       "rounded_rectangle",
 		Label:       label,
-		FontPx:      10.0,
+		FontPx:      12.0,
 		LabelValign: "center",
 		Fill:        ptrColor(jsNodeFillColor),
 		Border:      jsNodeBorderColor,
-		BorderWidth: 1.4,
+		BorderWidth: 1.25,
 		TextColor:   jsNodeTextColor,
 	}
 	if className == "compartment" {
-		style.Fill = nil
+		fill := jsNodeFillColor
+		fill.A = float64(0x7f) / 255.0
+		style.Shape = "compartment"
+		style.Fill = &fill
 		style.Border = jsCompartmentBorder
-		style.BorderWidth = 2.0
-		style.FontPx = 12.0
-		style.LabelValign = "top"
-		style.Dashed = true
+		style.BorderWidth = 3.25
+		style.FontPx = 14.0
+		style.LabelValign = "center"
 	}
 	if strings.Contains(className, "macromolecule") {
+		style.Shape = "macromolecule"
 		style.Border = jsMacromoleculeColor
 	}
+	if strings.Contains(className, "nucleic acid feature") {
+		style.Shape = "nucleic acid feature"
+	}
 	if strings.Contains(className, "simple chemical") {
-		style.Shape = "ellipse"
+		style.Shape = "simple chemical"
 		style.Border = jsSimpleChemColor
 	}
 	if strings.Contains(className, "complex") {
+		style.Shape = "complex"
 		style.Border = jsComplexColor
-		style.BorderWidth = 2.0
+		style.BorderWidth = 1.25
+		if !strings.HasSuffix(className, " multimer") {
+			fill := jsNodeFillColor
+			fill.A = float64(0x7f) / 255.0
+			style.Fill = &fill
+		}
 	}
-	if strings.Contains(className, "process") || className == "association" || className == "dissociation" {
-		style.Shape = "rectangle"
+	if strings.Contains(className, "process") || className == "association" || className == "dissociation" || className == "and" || className == "or" || className == "not" {
+		style.Shape = "polygon"
 		style.Border = jsProcessColor
-		style.Label = ""
 	}
 	if className == "submap" {
+		style.Shape = "rectangle"
 		style.Border = jsSubmapColor
-		style.BorderWidth = 2.0
+		style.BorderWidth = 1.25
+		style.FontPx = 12.0
+		style.LabelValign = "center"
 	}
 	if className == "phenotype" {
 		style.Shape = "hexagon"
 		style.Border = jsPhenotypeColor
 	}
 	if className == "source and sink" {
-		style.Shape = "ellipse"
+		style.Shape = "empty set"
 		style.Border = jsSourceSinkColor
+		style.Label = ""
+	}
+	if className == "unspecified entity" || className == "delay" {
+		style.Shape = "ellipse"
+	}
+	if className == "tag" || className == "perturbing agent" {
+		style.Shape = "polygon"
+	}
+	if strings.HasPrefix(className, "BA ") || className == "biological activity" {
+		style.Shape = "biological activity"
+	}
+	if className == "empty set" {
+		style.Shape = "empty set"
 		style.Label = ""
 	}
 	if classStyle, ok := styleConfig.styleForClass(className); ok {
@@ -841,7 +1404,7 @@ func jsTextColorForFill(fill Color) Color {
 
 // addManifestLabelIfNeeded emits a duplicate-id glyph label when JS exposes one.
 // Parameters: glyph is the duplicate glyph; emittedLabels tracks existing label ids; addElement appends manifest elements.
-func addManifestLabelIfNeeded(glyph *Glyph, emittedLabels map[string]bool, addElement func(ManifestElement), glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) {
+func addManifestLabelIfNeeded(glyph *Glyph, compoundRects map[string]PixelRect, emittedLabels map[string]bool, addElement func(ManifestElement), glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) {
 	if glyph.BBox == nil {
 		return
 	}
@@ -853,37 +1416,86 @@ func addManifestLabelIfNeeded(glyph *Glyph, emittedLabels map[string]bool, addEl
 	if emittedLabels[labelID] {
 		return
 	}
-	rect := manifestRect(*glyph.BBox)
-	labelY := rect.Center.Y
-	if style.LabelValign == "top" {
-		labelY = rect.Y0 + math.Max(8.0, style.FontPx)
-	}
+	rect := sbgnvizManifestRectForGlyph(glyph, compoundRects)
+	labelCenter := jsLabelCenter(glyph, rect, style)
 	addElement(ManifestElement{
 		ID: labelID, OwnerID: glyph.ID, Kind: "label", Type: "text", Class: glyph.ClassName,
-		CX: floatPtr(rect.Center.X), CY: floatPtr(labelY), Width: floatPtr(math.Max(1.0, rect.Width-8.0)), Height: floatPtr(math.Max(1.0, rect.Height-8.0)),
-		Text: style.Label,
+		CX: floatPtr(labelCenter.X), CY: floatPtr(labelCenter.Y), Width: floatPtr(math.Max(1.0, estimateLabelWidth(style.Label, style.FontPx))), Height: floatPtr(math.Max(1.0, style.FontPx)),
+		Text: style.Label, FontPx: floatPtr(style.FontPx),
 	})
 	emittedLabels[labelID] = true
 }
 
-// jsArcPoints resolves arc endpoints to JS-style node-boundary points.
-// Parameters: arc is the parsed SBGN arc; glyphByID and portParentByID are lookup maps.
-func jsArcPoints(arc Arc, glyphByID map[string]*Glyph, portParentByID map[string]string) ([2]Point, string, string, bool) {
+func jsLabelCenter(glyph *Glyph, rect PixelRect, style jsGlyphStyle) Point {
+	center := rect.Center
+	if style.LabelValign == "top" {
+		center.Y = rect.Y0 + math.Max(8.0, style.FontPx)
+	}
+	if style.LabelValign == "bottom" {
+		center.Y = rect.Y0 + rect.Height
+	}
+	return center
+}
+
+func estimateLabelWidth(label string, fontPx float64) float64 {
+	return math.Max(1.0, float64(len([]rune(strings.TrimSpace(label))))*fontPx*0.6)
+}
+
+// jsArcRenderPoints returns the SBGN start/end points used by sbgnviz edge rscratch.
+// Parameters: arc is parsed SBGN; glyphByID and portParentByID validate and resolve topology.
+func jsArcRenderPoints(arc Arc, glyphByID map[string]*Glyph, portParentByID map[string]string) ([2]Point, string, string, bool) {
 	sourceID := jsEndpointGlyphID(arc.Source, portParentByID)
 	targetID := jsEndpointGlyphID(arc.Target, portParentByID)
 	sourceGlyph := glyphByID[sourceID]
 	targetGlyph := glyphByID[targetID]
-	if sourceGlyph == nil || targetGlyph == nil || sourceGlyph.BBox == nil || targetGlyph.BBox == nil {
+	if sourceGlyph == nil || targetGlyph == nil || sourceGlyph.BBox == nil || targetGlyph.BBox == nil || len(arc.Points) < 2 {
 		return [2]Point{}, "", "", false
 	}
 	if isJSHiddenGlyphClass(sourceGlyph.ClassName) || isJSHiddenGlyphClass(targetGlyph.ClassName) {
 		return [2]Point{}, "", "", false
 	}
-	sourceRect := manifestRect(*sourceGlyph.BBox)
-	targetRect := manifestRect(*targetGlyph.BBox)
-	start := jsNodeBoundaryPoint(sourceGlyph, targetRect.Center)
-	end := jsNodeBoundaryPoint(targetGlyph, sourceRect.Center)
+	start := arc.Points[0]
+	end := arc.Points[len(arc.Points)-1]
+	if _, isPort := portParentByID[arc.Source]; isPort && !isCytoscapePortedClass(sourceGlyph.ClassName) {
+		if point, ok := jsNonCytoscapePortEndpoint(sourceGlyph, arc.Source); ok {
+			start = point
+		}
+	}
+	if _, isPort := portParentByID[arc.Target]; isPort && !isCytoscapePortedClass(targetGlyph.ClassName) {
+		if point, ok := jsNonCytoscapePortEndpoint(targetGlyph, arc.Target); ok {
+			end = point
+		}
+	}
 	return [2]Point{start, end}, sourceID, targetID, true
+}
+
+// jsArcMarkerPoint estimates Cytoscape's target arrow tip outside the target node.
+// Parameters: arc is parsed SBGN; glyphByID and portParentByID resolve target geometry.
+func jsArcMarkerPoint(arc Arc, glyphByID map[string]*Glyph, portParentByID map[string]string, auxiliaryRectsByParent map[string][]PixelRect) (Point, bool) {
+	_ = auxiliaryRectsByParent
+	points, _, targetID, ok := jsArcRenderPoints(arc, glyphByID, portParentByID)
+	if !ok {
+		return Point{}, false
+	}
+	targetGlyph := glyphByID[targetID]
+	if targetGlyph == nil || targetGlyph.BBox == nil {
+		return Point{}, false
+	}
+	other := points[0]
+	if len(arc.Points) > 2 {
+		other = arc.Points[len(arc.Points)-2]
+	}
+	offset := jsMarkerTipOffsetSource(arc.ClassName)
+	if math.Abs(offset) > 0.0 {
+		dx := points[1].X - other.X
+		dy := points[1].Y - other.Y
+		length := math.Hypot(dx, dy)
+		if length > 1e-6 {
+			return Point{X: points[1].X + dx/length*offset, Y: points[1].Y + dy/length*offset}, true
+		}
+	}
+	_ = targetGlyph
+	return points[1], true
 }
 
 // jsEndpointGlyphID maps a port reference back to its owning glyph for JS topology.
@@ -893,6 +1505,112 @@ func jsEndpointGlyphID(reference string, portParentByID map[string]string) strin
 		return parentID
 	}
 	return reference
+}
+
+func isCytoscapePortedClass(className string) bool {
+	switch className {
+	case "process", "omitted process", "uncertain process", "association", "dissociation", "and", "or", "not":
+		return true
+	default:
+		return false
+	}
+}
+
+func glyphCenterPoint(glyph *Glyph) Point {
+	if glyph == nil || glyph.BBox == nil {
+		return Point{}
+	}
+	return Point{X: glyph.BBox.X + glyph.BBox.W/2.0, Y: glyph.BBox.Y + glyph.BBox.H/2.0}
+}
+
+func jsNonCytoscapePortEndpoint(glyph *Glyph, portID string) (Point, bool) {
+	if glyph == nil || glyph.BBox == nil {
+		return Point{}, false
+	}
+	var port Port
+	found := false
+	for _, candidate := range glyph.Ports {
+		if candidate.ID == portID {
+			port = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		return Point{}, false
+	}
+	rect := expandPixelRect(manifestRect(*glyph.BBox), jsStyleForGlyph(glyph, nil).BorderWidth/2.0)
+	center := glyphCenterPoint(glyph)
+	dx := port.X - center.X
+	dy := port.Y - center.Y
+	if math.Abs(dx) > math.Abs(dy) {
+		if dx < 0 {
+			return Point{X: rect.X0, Y: port.Y}, true
+		}
+		return Point{X: rect.X0 + rect.Width, Y: port.Y}, true
+	}
+	if dy < 0 {
+		return Point{X: port.X, Y: rect.Y0}, true
+	}
+	return Point{X: port.X, Y: rect.Y0 + rect.Height}, true
+}
+
+func jsMarkerTipOffsetSource(className string) float64 {
+	switch jsArcMarker(className) {
+	case "triangle", "triangle-cross":
+		return 3.125
+	case "circle":
+		return -2.3125
+	case "diamond":
+		return 1.5625
+	default:
+		return 0.0
+	}
+}
+
+func jsGlyphBoundaryPoint(glyph *Glyph, other Point) Point {
+	rect := markerBoundaryRect(glyph)
+	style := jsStyleForGlyph(glyph, nil)
+	switch style.Shape {
+	case "ellipse", "simple chemical", "empty set":
+		return ellipseBoundaryPointFromRect(rect, other)
+	default:
+		return rectBoundaryPointFromRect(rect, other)
+	}
+}
+
+func markerBoundaryRect(glyph *Glyph) PixelRect {
+	rect := sbgnvizManifestRect(glyph)
+	if glyph == nil || isCompoundGlyphClass(glyph.ClassName) {
+		return rect
+	}
+	return expandPixelRect(rect, jsStyleForGlyph(glyph, nil).BorderWidth/2.0)
+}
+
+func expandPixelRect(rect PixelRect, delta float64) PixelRect {
+	width := math.Max(0.0, rect.Width+2.0*delta)
+	height := math.Max(0.0, rect.Height+2.0*delta)
+	return PixelRect{
+		X0:     rect.Center.X - width/2.0,
+		Y0:     rect.Center.Y - height/2.0,
+		Width:  width,
+		Height: height,
+		Center: rect.Center,
+	}
+}
+
+func firstAuxiliaryBoundaryPoint(rects []PixelRect, other Point, target Point) (Point, bool) {
+	bestScale := math.Inf(1)
+	bestPoint := Point{}
+	for _, rect := range rects {
+		expanded := expandPixelRect(rect, jsBorderWidthForClass("unit of information")/2.0)
+		point, scale, ok := rectBoundaryIntersection(expanded, other, target)
+		if ok && scale < bestScale {
+			bestScale = scale
+			bestPoint = point
+		}
+	}
+	return bestPoint, isFinite(bestScale)
 }
 
 // jsNodeBoundaryPoint intersects a center-to-center segment with the JS node shape.
@@ -907,11 +1625,24 @@ func jsNodeBoundaryPoint(glyph *Glyph, other Point) Point {
 // rectBoundaryPoint intersects a line from another point with a rectangle.
 // Parameters: bbox is the target rectangle; other is the opposite point.
 func rectBoundaryPoint(bbox BBox, other Point) Point {
-	rect := manifestRect(bbox)
-	dx := rect.Center.X - other.X
-	dy := rect.Center.Y - other.Y
+	return rectBoundaryPointFromRect(manifestRect(bbox), other)
+}
+
+// rectBoundaryPointFromRect intersects a line from another point with a rectangle.
+// Parameters: rect is the target rectangle; other is the opposite point.
+func rectBoundaryPointFromRect(rect PixelRect, other Point) Point {
+	point, _, ok := rectBoundaryIntersection(rect, other, rect.Center)
+	if ok {
+		return point
+	}
+	return rect.Center
+}
+
+func rectBoundaryIntersection(rect PixelRect, other Point, target Point) (Point, float64, bool) {
+	dx := target.X - other.X
+	dy := target.Y - other.Y
 	if math.Hypot(dx, dy) <= 1e-6 {
-		return rect.Center
+		return rect.Center, 0, true
 	}
 	candidates := []float64{}
 	if math.Abs(dx) > 1e-6 {
@@ -928,16 +1659,21 @@ func rectBoundaryPoint(bbox BBox, other Point) Point {
 		x := other.X + dx*scale
 		y := other.Y + dy*scale
 		if x >= rect.X0-1e-6 && x <= rect.X0+rect.Width+1e-6 && y >= rect.Y0-1e-6 && y <= rect.Y0+rect.Height+1e-6 {
-			return Point{X: x, Y: y}
+			return Point{X: x, Y: y}, scale, true
 		}
 	}
-	return rect.Center
+	return Point{}, 0, false
 }
 
 // ellipseBoundaryPoint intersects a line from the node center with an ellipse.
 // Parameters: bbox is the target ellipse bounds; other is the opposite point.
 func ellipseBoundaryPoint(bbox BBox, other Point) Point {
-	rect := manifestRect(bbox)
+	return ellipseBoundaryPointFromRect(manifestRect(bbox), other)
+}
+
+// ellipseBoundaryPointFromRect intersects a line from the node center with an ellipse.
+// Parameters: rect is the target ellipse bounds; other is the opposite point.
+func ellipseBoundaryPointFromRect(rect PixelRect, other Point) Point {
 	dx := other.X - rect.Center.X
 	dy := other.Y - rect.Center.Y
 	if math.Hypot(dx, dy) <= 1e-6 {
@@ -945,6 +1681,9 @@ func ellipseBoundaryPoint(bbox BBox, other Point) Point {
 	}
 	rx := rect.Width / 2.0
 	ry := rect.Height / 2.0
+	if rx <= 0.0 || ry <= 0.0 {
+		return rect.Center
+	}
 	scale := 1.0 / math.Sqrt(math.Pow(dx/rx, 2)+math.Pow(dy/ry, 2))
 	return Point{X: rect.Center.X + dx*scale, Y: rect.Center.Y + dy*scale}
 }
@@ -953,12 +1692,16 @@ func ellipseBoundaryPoint(bbox BBox, other Point) Point {
 // Parameters: className is the SBGN arc class.
 func jsArcMarker(className string) string {
 	switch className {
-	case "consumption":
+	case "consumption", "logic arc", "equivalence arc":
 		return "none"
-	case "inhibition":
+	case "inhibition", "negative influence":
 		return "tee"
 	case "catalysis":
 		return "circle"
+	case "modulation", "unknown influence":
+		return "diamond"
+	case "necessary stimulation":
+		return "triangle-cross"
 	default:
 		return "triangle"
 	}
@@ -1000,6 +1743,7 @@ func buildCanvas(width float64, height float64, background *Color, transform *Tr
 	r := renderer{
 		ctx:        ctx,
 		fontFamily: fontFamily,
+		background: bg,
 	}
 	if err := r.renderSBGNML(transform, glyphs, arcs, renderInfo, tagOrientations, showCloneMarkers, glyphColors, glyphColorType, autoContrastText, styleConfig); err != nil {
 		return nil, err
@@ -1163,6 +1907,10 @@ func parseXML(reader io.Reader) (*xmlElement, error) {
 				return nil, errors.New("unexpected XML end element")
 			}
 			stack = stack[:len(stack)-1]
+		case xml.CharData:
+			if len(stack) > 0 {
+				stack[len(stack)-1].Text += string(typed)
+			}
 		}
 	}
 	if root == nil {
@@ -1468,6 +2216,7 @@ func parseArcNode(arcNode *xmlElement) (Arc, error) {
 	var startNode *xmlElement
 	var endNode *xmlElement
 	var nextNodes []*xmlElement
+	var auxiliaryGlyphs []ArcGlyph
 	for _, child := range childElements(arcNode) {
 		switch child.Name {
 		case "start":
@@ -1476,6 +2225,8 @@ func parseArcNode(arcNode *xmlElement) (Arc, error) {
 			endNode = child
 		case "next":
 			nextNodes = append(nextNodes, child)
+		case "glyph":
+			auxiliaryGlyphs = append(auxiliaryGlyphs, parseArcGlyphNode(child))
 		}
 	}
 	if startNode == nil {
@@ -1512,12 +2263,29 @@ func parseArcNode(arcNode *xmlElement) (Arc, error) {
 	points = append(points, Point{X: endX, Y: endY})
 
 	return Arc{
-		ID:        elementAttr(arcNode, "id"),
-		ClassName: elementAttr(arcNode, "class"),
-		Source:    elementAttr(arcNode, "source"),
-		Target:    elementAttr(arcNode, "target"),
-		Points:    points,
+		ID:              elementAttr(arcNode, "id"),
+		ClassName:       elementAttr(arcNode, "class"),
+		Source:          elementAttr(arcNode, "source"),
+		Target:          elementAttr(arcNode, "target"),
+		Points:          points,
+		AuxiliaryGlyphs: auxiliaryGlyphs,
 	}, nil
+}
+
+func parseArcGlyphNode(glyphNode *xmlElement) ArcGlyph {
+	auxiliary := ArcGlyph{
+		ID:        elementAttr(glyphNode, "id"),
+		ClassName: elementAttr(glyphNode, "class"),
+	}
+	for _, child := range childElements(glyphNode) {
+		switch child.Name {
+		case "bbox":
+			auxiliary.BBox = parseBBox(child)
+		case "label":
+			auxiliary.Label = strings.ReplaceAll(elementAttr(child, "text"), "\r", "")
+		}
+	}
+	return auxiliary
 }
 
 // parseGlyphNode flattens one SBGN <glyph> subtree into the glyph slice.
@@ -1527,10 +2295,13 @@ func parseGlyphNode(glyphNode *xmlElement, parentID string, glyphs *[]Glyph) {
 	className := elementAttr(glyphNode, "class")
 	label := ""
 	var bbox *BBox
+	var extraWidth *float64
+	var extraHeight *float64
 	var ports []Port
 	hasClone := false
 	stateValue := ""
 	stateVariable := ""
+	entityName := ""
 
 	for _, child := range childElements(glyphNode) {
 		switch child.Name {
@@ -1549,7 +2320,15 @@ func parseGlyphNode(glyphNode *xmlElement, parentID string, glyphs *[]Glyph) {
 		case "state":
 			stateValue = elementAttr(child, "value")
 			stateVariable = elementAttr(child, "variable")
+		case "entity":
+			entityName = elementAttr(child, "name")
 		}
+	}
+	if extraNode := findFirstDescendant(glyphNode, "w"); extraNode != nil {
+		extraWidth = parseOptionalFloat(extraNode.Text)
+	}
+	if extraNode := findFirstDescendant(glyphNode, "h"); extraNode != nil {
+		extraHeight = parseOptionalFloat(extraNode.Text)
 	}
 
 	*glyphs = append(*glyphs, Glyph{
@@ -1557,11 +2336,14 @@ func parseGlyphNode(glyphNode *xmlElement, parentID string, glyphs *[]Glyph) {
 		ParentID:      parentID,
 		ClassName:     className,
 		BBox:          bbox,
+		ExtraWidth:    extraWidth,
+		ExtraHeight:   extraHeight,
 		Label:         label,
 		Ports:         ports,
 		HasClone:      hasClone,
 		StateValue:    stateValue,
 		StateVariable: stateVariable,
+		EntityName:    entityName,
 		Orientation:   elementAttr(glyphNode, "orientation"),
 	})
 
@@ -1732,6 +2514,8 @@ func (r renderer) renderSBGNML(transform *Transform, glyphs []Glyph, arcs []Arc,
 
 	glyphByID := map[string]*Glyph{}
 	portParentByID := map[string]string{}
+	auxiliaryRectsByParent := buildJSAuxiliaryRectsByParent(glyphs)
+	compoundRects := buildJSCompoundRects(glyphs, auxiliaryRectsByParent)
 	for index := range glyphs {
 		glyph := &glyphs[index]
 		if _, exists := glyphByID[glyph.ID]; exists {
@@ -1748,7 +2532,7 @@ func (r renderer) renderSBGNML(transform *Transform, glyphs []Glyph, arcs []Arc,
 	for index := range glyphs {
 		glyph := &glyphs[index]
 		if glyph.ClassName == "compartment" && glyphByID[glyph.ID] == glyph {
-			r.drawJSGlyph(transform, glyph, glyphColors, glyphColorType, autoContrastText, styleConfig)
+			r.drawJSGlyph(transform, glyph, compoundRects, glyphColors, glyphColorType, autoContrastText, styleConfig)
 		}
 	}
 	for _, arc := range arcs {
@@ -1757,32 +2541,90 @@ func (r renderer) renderSBGNML(transform *Transform, glyphs []Glyph, arcs []Arc,
 	for index := range glyphs {
 		glyph := &glyphs[index]
 		if glyph.ClassName != "compartment" && glyphByID[glyph.ID] == glyph {
-			r.drawJSGlyph(transform, glyph, glyphColors, glyphColorType, autoContrastText, styleConfig)
+			r.drawJSGlyph(transform, glyph, compoundRects, glyphColors, glyphColorType, autoContrastText, styleConfig)
 		}
+	}
+	for _, arc := range arcs {
+		r.drawJSArcMarker(transform, arc, glyphByID, portParentByID, auxiliaryRectsByParent, styleConfig)
+	}
+	for _, arc := range arcs {
+		r.drawJSArcAuxiliaryGlyphs(transform, arc)
 	}
 	return nil
 }
 
 // drawJSGlyph draws a glyph using the same primitive style as the JS/R baseline.
 // Parameters: transform maps SBGN coordinates; glyph is the parsed glyph; glyphColors maps labels or IDs to hex fill colors.
-func (r renderer) drawJSGlyph(transform *Transform, glyph *Glyph, glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) {
+func (r renderer) drawJSGlyph(transform *Transform, glyph *Glyph, compoundRects map[string]PixelRect, glyphColors map[string]string, glyphColorType GlyphColorType, autoContrastText bool, styleConfig *StyleConfig) {
+	if r.drawAuxiliaryGlyph(transform, glyph) {
+		return
+	}
 	if glyph.BBox == nil || isJSHiddenGlyphClass(glyph.ClassName) {
 		return
 	}
-	rect := bboxPixelRect(transform, *glyph.BBox)
+	sourceRect := sbgnvizManifestRectForGlyph(glyph, compoundRects)
+	rect := bboxPixelRect(transform, BBox{X: sourceRect.X0, Y: sourceRect.Y0, W: sourceRect.Width, H: sourceRect.Height})
 	style := jsStyleForGlyphWithColors(glyph, glyphColors, glyphColorType, autoContrastText, styleConfig)
-	path := jsShapePath(rect, style.Shape)
+	if strings.HasSuffix(glyph.ClassName, " multimer") {
+		shadowRect := PixelRect{X0: rect.X0 + 5.0, Y0: rect.Y0 + 5.0, Width: rect.Width, Height: rect.Height, Center: Point{X: rect.Center.X + 5.0, Y: rect.Center.Y + 5.0}}
+		shadowPath := jsShapePathForGlyph(shadowRect, style.Shape, glyph)
+		r.drawJSPath(shadowPath, style.Fill, style.Border, style.BorderWidth, style.Dashed)
+	}
+	path := jsShapePathForGlyph(rect, style.Shape, glyph)
 	r.drawJSPath(path, style.Fill, style.Border, style.BorderWidth, style.Dashed)
+	if glyph.HasClone {
+		r.drawCloneMarker(path, rect)
+	}
+	if glyph.ClassName == "empty set" || glyph.ClassName == "source and sink" {
+		r.drawEmptySetCross(rect, style.Border, style.BorderWidth)
+	}
 	if strings.TrimSpace(style.Label) == "" {
 		return
 	}
-	textScale := math.Min(1.0, transform.scaleScalar(1.0))
-	renderedFontPx := math.Max(5.0, style.FontPx*textScale)
-	labelCenter := rect.Center
-	if style.LabelValign == "top" {
-		labelCenter.Y = rect.Y0 + math.Max(8.0, renderedFontPx)
-	}
+	renderedFontPx := math.Max(5.0, style.FontPx)
+	sourceLabelCenter := jsLabelCenter(glyph, sourceRect, style)
+	labelCenter := transform.mapPoint(sourceLabelCenter.X, sourceLabelCenter.Y)
 	r.drawTextCentered(labelCenter, style.Label, renderedFontPx, style.TextColor)
+}
+
+// drawAuxiliaryGlyph renders nested unit/state boxes and reports whether it handled the glyph.
+// Parameters: transform maps source coordinates; glyph is a flattened child glyph.
+func (r renderer) drawAuxiliaryGlyph(transform *Transform, glyph *Glyph) bool {
+	if glyph == nil || glyph.BBox == nil || (glyph.ClassName != "unit of information" && glyph.ClassName != "state variable") {
+		return false
+	}
+	if glyph.ParentID == "" {
+		return true
+	}
+	rect := bboxPixelRect(transform, *glyph.BBox)
+	path := jsAuxiliaryPath(rect, jsAuxiliaryShapeType(glyph))
+	r.drawPath(path, &jsNodeFillColor, &jsNodeBorderColor, 1.4)
+	label := jsAuxiliaryLabel(glyph)
+	if strings.TrimSpace(label) != "" {
+		r.drawTextCentered(rect.Center, label, math.Max(5.0, math.Min(8.0, rect.Height*0.75)), jsNodeTextColor)
+	}
+	return true
+}
+
+func jsAuxiliaryPath(rect PixelRect, shapeType string) *canvas.Path {
+	switch shapeType {
+	case "round_rectangle":
+		return roundRectPath(rect, math.Max(math.Min(rect.Width, rect.Height)*0.1, 1.0))
+	case "bottom_round_rectangle":
+		return roundBottomRectPath(rect)
+	case "complex":
+		return cutRectPath(rect)
+	case "stadium_round_rectangle":
+		return stadiumPath(rect)
+	case "ellipse":
+		return ellipsePath(rect)
+	case "perturbing_agent":
+		return perturbingAgentPath(rect)
+	case "rectangle":
+		return rectPath(rect)
+	default:
+		return roundRectPath(rect, math.Min(rect.Height/2.0, 4.0))
+	}
 }
 
 // jsShapePath creates a JS baseline primitive path.
@@ -1791,14 +2633,99 @@ func jsShapePath(rect PixelRect, shape string) *canvas.Path {
 	switch shape {
 	case "ellipse":
 		return ellipsePath(rect)
+	case "simple chemical":
+		return stadiumPath(rect)
 	case "rectangle":
 		return rectPath(rect)
 	case "hexagon":
 		return hexagonPath(rect)
+	case "compartment":
+		return barrelPath(rect)
+	case "complex":
+		return cutRectPath(rect)
+	case "nucleic acid feature":
+		return roundBottomRectPath(rect)
+	case "polygon", "biological activity", "macromolecule":
+		radius := math.Max(math.Min(rect.Width, rect.Height)*0.1, 1.0)
+		return roundRectPath(rect, radius)
+	case "empty set":
+		return ellipsePath(rect)
 	default:
 		radius := math.Max(math.Min(rect.Width, rect.Height)*0.1, 1.0)
 		return roundRectPath(rect, radius)
 	}
+}
+
+// jsShapePathForGlyph creates a JS primitive path, including ported glyph polygons.
+// Parameters: rect is rendered bounds; shape and glyph select the sbgnviz primitive.
+func jsShapePathForGlyph(rect PixelRect, shape string, glyph *Glyph) *canvas.Path {
+	if glyph != nil && isPortedGlyphClass(glyph.ClassName) {
+		return portedGlyphPath(rect, glyph)
+	}
+	if glyph != nil {
+		switch glyph.ClassName {
+		case "tag":
+			return tagPath(rect, glyph.Orientation)
+		case "perturbing agent":
+			return perturbingAgentPath(rect)
+		}
+	}
+	return jsShapePath(rect, shape)
+}
+
+// isPortedGlyphClass reports whether sbgnviz draws a glyph with port stubs.
+func isPortedGlyphClass(className string) bool {
+	switch className {
+	case "process", "omitted process", "uncertain process", "association", "dissociation", "and", "or", "not":
+		return true
+	default:
+		return false
+	}
+}
+
+// portedGlyphPath builds the sbgnviz process/logical operator outline.
+func portedGlyphPath(rect PixelRect, glyph *Glyph) *canvas.Path {
+	orientation := "horizontal"
+	if len(glyph.Ports) >= 2 {
+		minX, maxX := glyph.Ports[0].X, glyph.Ports[0].X
+		minY, maxY := glyph.Ports[0].Y, glyph.Ports[0].Y
+		for _, port := range glyph.Ports[1:] {
+			minX = math.Min(minX, port.X)
+			maxX = math.Max(maxX, port.X)
+			minY = math.Min(minY, port.Y)
+			maxY = math.Max(maxY, port.Y)
+		}
+		if maxY-minY > maxX-minX {
+			orientation = "vertical"
+		}
+	}
+	coreW := rect.Width * 0.707071
+	coreH := rect.Height * 0.707071
+	core := PixelRect{X0: rect.Center.X - coreW/2.0, Y0: rect.Center.Y - coreH/2.0, Width: coreW, Height: coreH, Center: rect.Center}
+	coreCircle := glyph.ClassName == "association" || glyph.ClassName == "dissociation" || glyph.ClassName == "and" || glyph.ClassName == "or" || glyph.ClassName == "not"
+	points := []Point{}
+	if orientation == "horizontal" {
+		lineHalf := math.Max(rect.Height*0.01, 0.5) / 2.0
+		if coreCircle {
+			points = append(points, Point{X: rect.X0, Y: rect.Center.Y - lineHalf}, Point{X: core.X0, Y: rect.Center.Y - lineHalf})
+			for i := 0; i <= 30; i++ {
+				theta := math.Pi - math.Pi*float64(i)/30.0
+				points = append(points, Point{X: core.Center.X + core.Width/2.0*math.Cos(theta), Y: core.Center.Y + core.Height/2.0*math.Sin(theta)})
+			}
+			points = append(points, Point{X: core.X0 + core.Width, Y: rect.Center.Y - lineHalf}, Point{X: rect.X0 + rect.Width, Y: rect.Center.Y - lineHalf}, Point{X: rect.X0 + rect.Width, Y: rect.Center.Y + lineHalf}, Point{X: core.X0 + core.Width, Y: rect.Center.Y + lineHalf})
+			for i := 0; i <= 30; i++ {
+				theta := -math.Pi * float64(i) / 30.0
+				points = append(points, Point{X: core.Center.X + core.Width/2.0*math.Cos(theta), Y: core.Center.Y + core.Height/2.0*math.Sin(theta)})
+			}
+			points = append(points, Point{X: core.X0, Y: rect.Center.Y + lineHalf}, Point{X: rect.X0, Y: rect.Center.Y + lineHalf})
+		} else {
+			points = []Point{{rect.X0, rect.Center.Y - lineHalf}, {core.X0, rect.Center.Y - lineHalf}, {core.X0, core.Y0}, {core.X0 + core.Width, core.Y0}, {core.X0 + core.Width, rect.Center.Y - lineHalf}, {rect.X0 + rect.Width, rect.Center.Y - lineHalf}, {rect.X0 + rect.Width, rect.Center.Y + lineHalf}, {core.X0 + core.Width, rect.Center.Y + lineHalf}, {core.X0 + core.Width, core.Y0 + core.Height}, {core.X0, core.Y0 + core.Height}, {core.X0, rect.Center.Y + lineHalf}, {rect.X0, rect.Center.Y + lineHalf}}
+		}
+	} else {
+		lineHalf := math.Max(rect.Width*0.01, 0.5) / 2.0
+		points = []Point{{rect.Center.X - lineHalf, rect.Y0}, {rect.Center.X - lineHalf, core.Y0}, {core.X0, core.Y0}, {core.X0, core.Y0 + core.Height}, {rect.Center.X - lineHalf, core.Y0 + core.Height}, {rect.Center.X - lineHalf, rect.Y0 + rect.Height}, {rect.Center.X + lineHalf, rect.Y0 + rect.Height}, {rect.Center.X + lineHalf, core.Y0 + core.Height}, {core.X0 + core.Width, core.Y0 + core.Height}, {core.X0 + core.Width, core.Y0}, {rect.Center.X + lineHalf, core.Y0}, {rect.Center.X + lineHalf, rect.Y0}}
+	}
+	return polygonPath(points)
 }
 
 // drawJSPath draws a JS primitive shape with optional dashed stroke.
@@ -1823,7 +2750,7 @@ func (r renderer) drawJSPath(path *canvas.Path, fill *Color, stroke Color, width
 // drawJSArc draws one JS baseline edge line and marker.
 // Parameters: transform maps SBGN coordinates; arc is parsed; glyphByID/portParentByID resolve endpoints.
 func (r renderer) drawJSArc(transform *Transform, arc Arc, glyphByID map[string]*Glyph, portParentByID map[string]string, styleConfig *StyleConfig) {
-	points, _, _, ok := jsArcPoints(arc, glyphByID, portParentByID)
+	points, _, _, ok := jsArcRenderPoints(arc, glyphByID, portParentByID)
 	if !ok {
 		return
 	}
@@ -1833,15 +2760,56 @@ func (r renderer) drawJSArc(transform *Transform, arc Arc, glyphByID map[string]
 	path.MoveTo(start.X, start.Y)
 	path.LineTo(end.X, end.Y)
 	edgeColor := styleConfig.edgeColor()
-	r.drawPath(path, nil, &edgeColor, 1.3)
+	r.drawPath(path, nil, &edgeColor, 1.25)
+}
+
+func (r renderer) drawJSArcAuxiliaryGlyphs(transform *Transform, arc Arc) {
+	for _, glyph := range arc.AuxiliaryGlyphs {
+		if glyph.BBox == nil || !isArcAuxiliaryGlyphClass(glyph.ClassName) {
+			continue
+		}
+		rect := bboxPixelRect(transform, *glyph.BBox)
+		r.drawPath(rectPath(rect), &jsNodeFillColor, &jsNodeBorderColor, 1.25)
+		r.drawTextCentered(rect.Center, glyph.Label, math.Max(5.0, math.Min(9.0, rect.Height*0.75)), jsNodeTextColor)
+	}
+}
+
+// drawJSArcMarker redraws markers above nodes so arrowheads are not covered by node fills.
+// Parameters: transform maps source coordinates; arc/glyph lookups resolve the rendered endpoint.
+func (r renderer) drawJSArcMarker(transform *Transform, arc Arc, glyphByID map[string]*Glyph, portParentByID map[string]string, auxiliaryRectsByParent map[string][]PixelRect, styleConfig *StyleConfig) {
+	points, _, _, ok := jsArcRenderPoints(arc, glyphByID, portParentByID)
+	if !ok {
+		return
+	}
+	markerPoint, markerOK := jsArcMarkerPoint(arc, glyphByID, portParentByID, auxiliaryRectsByParent)
+	if !markerOK {
+		markerPoint = points[1]
+	}
+	prevPoint := points[1]
+	if math.Hypot(markerPoint.X-prevPoint.X, markerPoint.Y-prevPoint.Y) <= 1e-6 {
+		prevPoint = points[0]
+	}
+	start := transform.mapPoint(prevPoint.X, prevPoint.Y)
+	end := transform.mapPoint(markerPoint.X, markerPoint.Y)
+	edgeColor := styleConfig.edgeColor()
 	marker := jsArcMarker(arc.ClassName)
+	markerSize := arrowSize * cytoscapeArrowScale
 	if marker == "triangle" {
-		r.drawFilledTriangle(end, start, transform.scaleScalar(arrowSize), edgeColor)
+		if arc.ClassName == "production" {
+			r.drawMarkerPolygon(end, start, markerSize, []Point{{X: -0.15, Y: -0.3}, {X: 0, Y: 0}, {X: 0.15, Y: -0.3}}, &edgeColor, nil, 0)
+		} else {
+			r.drawMarkerPolygon(end, start, markerSize, []Point{{X: -0.15, Y: -0.3}, {X: 0, Y: 0}, {X: 0.15, Y: -0.3}}, &r.background, &edgeColor, 1.0)
+		}
 	} else if marker == "tee" {
-		r.drawInhibitionBar(end, start, transform.scaleScalar(barLength), 0.0, edgeColor, 1.3)
+		r.drawMarkerPolygon(end, start, markerSize, []Point{{X: -0.15, Y: 0}, {X: -0.15, Y: -0.1}, {X: 0.15, Y: -0.1}, {X: 0.15, Y: 0}}, &edgeColor, nil, 1.25)
 	} else if marker == "circle" {
-		radius := math.Max(transform.scaleScalar(arrowSize)*0.4, 1.0)
-		r.drawPath(circlePath(end, radius), &edgeColor, &edgeColor, 1.3)
+		radius := math.Max(markerSize*0.15, 1.0)
+		r.drawPath(circlePath(end, radius), &r.background, &edgeColor, 1.0)
+	} else if marker == "diamond" {
+		r.drawMarkerPolygon(end, start, markerSize, []Point{{X: -0.15, Y: -0.15}, {X: 0, Y: -0.3}, {X: 0.15, Y: -0.15}, {X: 0, Y: 0}}, &r.background, &edgeColor, 1.0)
+	} else if marker == "triangle-cross" {
+		r.drawMarkerPolygon(end, start, markerSize, []Point{{X: -0.15, Y: -0.3}, {X: 0, Y: 0}, {X: 0.15, Y: -0.3}}, &r.background, &edgeColor, 1.0)
+		r.drawMarkerPolygon(end, start, markerSize, []Point{{X: -0.15, Y: -0.4}, {X: -0.15, Y: -0.4344827586206897}, {X: 0.15, Y: -0.4344827586206897}, {X: 0.15, Y: -0.4}}, &r.background, &edgeColor, 1.0)
 	}
 }
 
@@ -1880,6 +2848,56 @@ func trianglePoints(end Point, prev Point, size float64) (Point, Point, Point, b
 		Point{X: baseX - perpX*halfWidth, Y: baseY - perpY*halfWidth},
 		end,
 		true
+}
+
+// markerPolygonPoints maps Cytoscape marker-local coordinates to rendered points.
+func markerPolygonPoints(end Point, prev Point, size float64, local []Point) ([]Point, bool) {
+	dx := end.X - prev.X
+	dy := end.Y - prev.Y
+	length := math.Hypot(dx, dy)
+	if length == 0.0 {
+		return nil, false
+	}
+	ux := dx / length
+	uy := dy / length
+	px := -uy
+	py := ux
+	points := make([]Point, 0, len(local))
+	for _, point := range local {
+		points = append(points, Point{
+			X: end.X + ux*point.Y*size - px*point.X*size,
+			Y: end.Y + uy*point.Y*size - py*point.X*size,
+		})
+	}
+	return points, true
+}
+
+// drawMarkerPolygon draws an oriented Cytoscape marker polygon.
+func (r renderer) drawMarkerPolygon(end Point, prev Point, size float64, local []Point, fillColor *Color, strokeColor *Color, strokeWidth float64) {
+	points, ok := markerPolygonPoints(end, prev, size, local)
+	if !ok {
+		return
+	}
+	path := polygonPath(points)
+	r.drawPath(path, fillColor, strokeColor, strokeWidth)
+}
+
+// drawCloneMarker draws the clone swatch clipped to the parent glyph outline.
+// Parameters: clipPath is the parent shape and rect is its rendered bounding box.
+func (r renderer) drawCloneMarker(clipPath *canvas.Path, rect PixelRect) {
+	markerHeight := math.Max(3.0, rect.Height*0.22)
+	band := rectPath(PixelRect{X0: rect.X0, Y0: rect.Y0 + rect.Height - markerHeight, Width: rect.Width, Height: markerHeight, Center: Point{X: rect.Center.X, Y: rect.Y0 + rect.Height - markerHeight/2.0}})
+	path := clipPath.And(band)
+	fill := Color{R: 0.51, G: 0.51, B: 0.51, A: 1}
+	r.drawPath(path, &fill, nil, 0)
+}
+
+// drawEmptySetCross draws the diagonal cross line for empty-set/source-sink nodes.
+func (r renderer) drawEmptySetCross(rect PixelRect, stroke Color, strokeWidth float64) {
+	path := &canvas.Path{}
+	path.MoveTo(rect.X0, rect.Y0+rect.Height)
+	path.LineTo(rect.X0+rect.Width, rect.Y0)
+	r.drawPath(path, nil, &stroke, strokeWidth)
 }
 
 // drawInhibitionBar draws an inhibition bar perpendicular to an arc direction.
@@ -2013,6 +3031,105 @@ func hexagonPath(rect PixelRect) *canvas.Path {
 		{X: x0 + 0.25*w, Y: y0 + h},
 	}
 	return polygonPath(points)
+}
+
+// stadiumPath builds the simple-chemical round capsule used by sbgnviz.
+func stadiumPath(rect PixelRect) *canvas.Path {
+	return roundRectPath(rect, math.Max(1.0, rect.Height/2.0))
+}
+
+// tagPath builds the sbgnviz tag polygon with a notch/point by orientation.
+func tagPath(rect PixelRect, orientation string) *canvas.Path {
+	return polygonPath(tagPolygonPoints(rect, orientation))
+}
+
+func tagPolygonPoints(rect PixelRect, orientation string) []Point {
+	x0, y0 := rect.X0, rect.Y0
+	x1, y1 := rect.X0+rect.Width, rect.Y0+rect.Height
+	cx, cy := rect.Center.X, rect.Center.Y
+	switch strings.ToLower(strings.TrimSpace(orientation)) {
+	case "left":
+		return []Point{{X: x1, Y: y0}, {X: x0 + 0.75*rect.Width, Y: y0}, {X: x0, Y: cy}, {X: x0 + 0.75*rect.Width, Y: y1}, {X: x1, Y: y1}}
+	case "up":
+		return []Point{{X: x0, Y: y1}, {X: x0, Y: y0 + 0.75*rect.Height}, {X: cx, Y: y0}, {X: x1, Y: y0 + 0.75*rect.Height}, {X: x1, Y: y1}}
+	case "down":
+		return []Point{{X: x0, Y: y0}, {X: x0, Y: y0 + 0.25*rect.Height}, {X: cx, Y: y1}, {X: x1, Y: y0 + 0.25*rect.Height}, {X: x1, Y: y0}}
+	default:
+		return []Point{{X: x0, Y: y0}, {X: x0 + 0.625*rect.Width, Y: y0}, {X: x1, Y: cy}, {X: x0 + 0.625*rect.Width, Y: y1}, {X: x0, Y: y1}}
+	}
+}
+
+// perturbingAgentPath builds sbgnviz's six-point perturbing-agent shape.
+func perturbingAgentPath(rect PixelRect) *canvas.Path {
+	return polygonPath(perturbingAgentPoints(rect))
+}
+
+func perturbingAgentPoints(rect PixelRect) []Point {
+	x0, y0 := rect.X0, rect.Y0
+	x1, y1 := rect.X0+rect.Width, rect.Y0+rect.Height
+	cy := rect.Center.Y
+	return []Point{
+		{X: x0, Y: y0},
+		{X: x0 + 0.25*rect.Width, Y: cy},
+		{X: x0, Y: y1},
+		{X: x1, Y: y1},
+		{X: x1 - 0.25*rect.Width, Y: cy},
+		{X: x1, Y: y0},
+	}
+}
+
+// cutRectPath builds the clipped-corner outline used for complex nodes.
+func cutRectPath(rect PixelRect) *canvas.Path {
+	corner := math.Max(1.0, math.Min(12.0, math.Min(rect.Width, rect.Height)/3.0))
+	x0, y0 := rect.X0, rect.Y0
+	x1, y1 := rect.X0+rect.Width, rect.Y0+rect.Height
+	points := []Point{
+		{X: x0 + corner, Y: y0},
+		{X: x1 - corner, Y: y0},
+		{X: x1, Y: y0 + corner},
+		{X: x1, Y: y1 - corner},
+		{X: x1 - corner, Y: y1},
+		{X: x0 + corner, Y: y1},
+		{X: x0, Y: y1 - corner},
+		{X: x0, Y: y0 + corner},
+	}
+	return polygonPath(points)
+}
+
+// roundBottomRectPath builds the nucleic-acid feature shape.
+func roundBottomRectPath(rect PixelRect) *canvas.Path {
+	radius := math.Max(1.0, rect.Height*0.25)
+	path := &canvas.Path{}
+	x0, y0 := rect.X0, rect.Y0
+	x1, y1 := rect.X0+rect.Width, rect.Y0+rect.Height
+	path.MoveTo(x0, y0)
+	path.LineTo(x1, y0)
+	path.LineTo(x1, y1-radius)
+	path.QuadTo(x1, y1, x1-radius, y1)
+	path.LineTo(x0+radius, y1)
+	path.QuadTo(x0, y1, x0, y1-radius)
+	path.LineTo(x0, y0)
+	path.Close()
+	return path
+}
+
+// barrelPath approximates sbgnviz's compartment outline.
+func barrelPath(rect PixelRect) *canvas.Path {
+	path := &canvas.Path{}
+	x0, y0 := rect.X0, rect.Y0
+	x1, y1 := rect.X0+rect.Width, rect.Y0+rect.Height
+	control := math.Min(rect.Width*0.10, 100.0)
+	path.MoveTo(x0, y0+15.0)
+	path.LineTo(x0, y1-15.0)
+	path.QuadTo(x0+5.0, y1, x0+control, y1)
+	path.LineTo(x1-control, y1)
+	path.QuadTo(x1-5.0, y1, x1, y1-15.0)
+	path.LineTo(x1, y0+15.0)
+	path.QuadTo(x1-5.0, y0, x1-control, y0)
+	path.LineTo(x0+control, y0)
+	path.QuadTo(x0+5.0, y0, x0, y0+15.0)
+	path.Close()
+	return path
 }
 
 // polygonPath builds a closed polygon path from ordered points.

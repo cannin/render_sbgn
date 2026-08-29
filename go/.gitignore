@@ -36,8 +36,6 @@ bootstrap
 bootstrap_mcp
 function_mcp.zip
 function.zip
-cmd
-
 # Binary
 render_sbgn_go
 

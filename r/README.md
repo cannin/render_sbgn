@@ -1,39 +1,42 @@
-# render_sbgn_r
+# renderSbgnR
 
-SBGNML renderer implemented in R using base graphics and the xml2 parser.
+R SBGN-ML renderer using base graphics with `xml2` parsing. Package version:
+0.0.5.
 
-## Installation
+## Requirements and installation
 
-Install directly from GitHub:
+R 4.2 or newer is required. From the repository root:
 
-```r
-install.packages("remotes")
-remotes::install_github("cannin/render_sbgn_r")
+```bash
+R CMD INSTALL r
 ```
+
+Package dependencies declared in `DESCRIPTION` are `xml2` and `jsonlite`.
 
 ## Usage
 
-Render a single SBGNML file from R:
+From R:
 
 ```r
 renderSbgnR::draw_sbgnml("input.sbgn", "output.png")
 renderSbgnR::draw_sbgnml("input.sbgn", "output.svg")
 ```
 
-Or run the source-checkout CLI:
+From a source checkout:
 
 ```bash
-Rscript draw_sbgnml.R --input input.sbgn --output output.png
+Rscript r/draw_sbgnml.R \
+  --input-path render_examples/sbgn_examples/colors.sbgn \
+  --output-path colors.png
 ```
 
-Render all examples (PNG + SVG):
+Run `Rscript r/draw_sbgnml.R --version` to print the coordinated version.
 
-```sh
-Rscript render_examples.R
+## Tests
+
+```bash
+./scripts/test-r.sh
 ```
 
-## Notes
-
-- SVG output is generated alongside PNG output using R's `svg()` device.
-- Package installation installs `xml2` and `jsonlite` as dependencies.
-- Font rendering assumes Liberation Sans is available on the system.
+Repository-wide conformance tests are run with
+`./scripts/test-conformance.sh`.

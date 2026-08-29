@@ -1,21 +1,25 @@
 # Repository Guidelines
 
 ## Project Structure
-- `src/main.rs`: single Rust binary (CLI, SBGNML parsing, rendering).
+- `src/main.rs`: renderer CLI, SBGNML parsing, and rendering.
+- `src/bin/lambda.rs`: optional AWS Lambda custom-runtime entry point.
+- `.cargo/config.toml`: musl linker configuration.
+- `assets/`: fonts embedded into the musl-compatible binary.
 - `Cargo.toml` / `Cargo.lock`: Rust package metadata.
 - `target/`: build artifacts.
 - Style reference repo: `../cytoscape-sbgn-stylesheet/` (sizes, offsets, SVG glyph details).
 - XML parser: `xmltree` (DOM-style read).
 
 ## Build, Test, Run
-- Build: `cargo build` (debug) or `cargo build --release`.
+- Host build: `cargo build` (debug).
+- Linux musl release: `../scripts/build-rust-musl.sh`.
 - Run (release): `./target/release/render_sbgn_rs draw_sbgnml --input examples/sbgn/foo.sbgn --output out.png --padding 10`.
 - Batch render (examples): 
-  - `mkdir -p render_examples/output_render_sbgn_rs`
-  - `for f in render_examples/sbgn_examples/*.sbgn render_examples/sbgn_all_symbols/*.sbgn; do base=$(basename "$f" .sbgn); ./target/debug/render_sbgn_rs draw_sbgnml --input "$f" --output "render_examples/output_render_sbgn_rs/${base}.png" --padding 10; done`
+  - Use `../scripts/test-conformance.sh` from this directory.
 - Tests: none yet (use `cargo test` if you add them).
 - Formatting: `cargo fmt` (system `rustfmt` package is acceptable; install via `apt-get install rustfmt` if missing).
-- Environment note: `python` is not available by default in this environment.
+- Release binaries must target musl and remain independent of host C graphics
+  libraries.
 
 ## Coding Style
 - Rust 2021; run `cargo fmt` when changing structure.
