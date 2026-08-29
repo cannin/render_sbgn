@@ -117,6 +117,8 @@ an uncommitted working tree or move a tag that has already been published.
   files are generated and must stay untracked.
 - Keep `.github/workflows/ci.yml` compatible with local `act` execution; `.actrc`
   selects an Ubuntu-compatible x86_64 runner image.
+- Language README-only changes must not trigger CI. Keep the ordered negative
+  `README.md` patterns after the language-directory include patterns.
 - Release artifacts must be built from the tagged commit. Keep artifact names
   platform- and architecture-specific and update the release workflow, root
   README, and language README together when the distribution set changes.

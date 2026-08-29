@@ -7,12 +7,20 @@ on:
       - "go/**"
       - "python/**"
       - "r/**"
+      - "!rust/**/README.md"
+      - "!go/**/README.md"
+      - "!python/**/README.md"
+      - "!r/**/README.md"
   pull_request:
     paths:
       - "rust/**"
       - "go/**"
       - "python/**"
       - "r/**"
+      - "!rust/**/README.md"
+      - "!go/**/README.md"
+      - "!python/**/README.md"
+      - "!r/**/README.md"
 
 permissions:
   contents: read
