@@ -95,5 +95,5 @@ jobs:
         run: |
           ./scripts/build-rust-musl.sh
           binary="rust/target/x86_64-unknown-linux-musl/release/render_sbgn_rs"
-          test "$("$binary" --version)" = "0.0.6"
+          test "$("$binary" --version)" = "0.0.7"
           file "$binary" | grep -Eq 'statically linked|static-pie linked'

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.7 - 2026-08-29
+
+- Rendered `AND`, `OR`, and `NOT` logical nodes with circular cores for both
+  horizontal and vertical port orientations in all four implementations.
+- Preserved correctly oriented port stubs on logical nodes.
+- Regenerated the shared AF and PD all-symbol renderer previews.
+
 ## 0.0.6 - 2026-08-29
 
 - Aligned the Python, Rust, Go, and R command-line flags and help behavior.

@@ -14,7 +14,7 @@ NULL
 
 # Configuration constants for layout and styling.
 DEFAULT_PADDING_PX <- 50
-RENDERER_VERSION <- "0.0.6"
+RENDERER_VERSION <- "0.0.7"
 FONT_MIN_PX <- 6
 FONT_BASE_PX <- 12
 FONT_FAMILY <- "Liberation Sans"
@@ -927,6 +927,45 @@ ported_glyph_points <- function(rect, glyph) {
   }
 
   line_half <- max(rect$width * 0.01, 0.5) / 2
+  if (core_circle) {
+    left_angles <- seq(-pi / 2, -3 * pi / 2, length.out = 31)
+    right_angles <- seq(pi / 2, -pi / 2, length.out = 31)
+    left_arc <- data.frame(
+      x = core$center$x + core$width / 2 * cos(left_angles),
+      y = core$center$y + core$height / 2 * sin(left_angles)
+    )
+    right_arc <- data.frame(
+      x = core$center$x + core$width / 2 * cos(right_angles),
+      y = core$center$y + core$height / 2 * sin(right_angles)
+    )
+    return(rbind(
+      data.frame(
+        x = rep(rect$center$x - line_half, 2),
+        y = c(rect$y0, core$y0)
+      ),
+      left_arc,
+      data.frame(
+        x = c(
+          rect$center$x - line_half,
+          rect$center$x - line_half,
+          rect$center$x + line_half,
+          rect$center$x + line_half
+        ),
+        y = c(
+          core$y0 + core$height,
+          rect$y0 + rect$height,
+          rect$y0 + rect$height,
+          core$y0 + core$height
+        )
+      ),
+      right_arc,
+      data.frame(
+        x = rep(rect$center$x + line_half, 2),
+        y = c(core$y0, rect$y0)
+      )
+    ))
+  }
+
   data.frame(
     x = c(
       rect$center$x - line_half,

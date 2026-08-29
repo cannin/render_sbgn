@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "render_sbgn_rs"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "ahash",
  "anyhow",

@@ -3010,7 +3010,59 @@ fn ported_glyph_path(rect: PixelRect, glyph: &Glyph) -> SkPath {
     if !vertical {
         let line_half = (rect.height * 0.01).max(0.5) / 2.0;
         if core_circle {
-            return ellipse_path(core);
+            let mut points = vec![
+                Point {
+                    x: rect.x0,
+                    y: rect.center.y - line_half,
+                },
+                Point {
+                    x: core.x0,
+                    y: rect.center.y - line_half,
+                },
+            ];
+            for index in 0..=30 {
+                let theta = std::f64::consts::PI - std::f64::consts::PI * f64::from(index) / 30.0;
+                points.push(Point {
+                    x: core.center.x + core.width / 2.0 * theta.cos(),
+                    y: core.center.y + core.height / 2.0 * theta.sin(),
+                });
+            }
+            points.extend([
+                Point {
+                    x: core.x0 + core.width,
+                    y: rect.center.y - line_half,
+                },
+                Point {
+                    x: rect.x0 + rect.width,
+                    y: rect.center.y - line_half,
+                },
+                Point {
+                    x: rect.x0 + rect.width,
+                    y: rect.center.y + line_half,
+                },
+                Point {
+                    x: core.x0 + core.width,
+                    y: rect.center.y + line_half,
+                },
+            ]);
+            for index in 0..=30 {
+                let theta = -std::f64::consts::PI * f64::from(index) / 30.0;
+                points.push(Point {
+                    x: core.center.x + core.width / 2.0 * theta.cos(),
+                    y: core.center.y + core.height / 2.0 * theta.sin(),
+                });
+            }
+            points.extend([
+                Point {
+                    x: core.x0,
+                    y: rect.center.y + line_half,
+                },
+                Point {
+                    x: rect.x0,
+                    y: rect.center.y + line_half,
+                },
+            ]);
+            return polygon_path(&points);
         }
         return polygon_path(&[
             Point {
@@ -3064,6 +3116,62 @@ fn ported_glyph_path(rect: PixelRect, glyph: &Glyph) -> SkPath {
         ]);
     }
     let line_half = (rect.width * 0.01).max(0.5) / 2.0;
+    if core_circle {
+        let mut points = vec![
+            Point {
+                x: rect.center.x - line_half,
+                y: rect.y0,
+            },
+            Point {
+                x: rect.center.x - line_half,
+                y: core.y0,
+            },
+        ];
+        for index in 0..=30 {
+            let theta =
+                -std::f64::consts::PI / 2.0 - std::f64::consts::PI * f64::from(index) / 30.0;
+            points.push(Point {
+                x: core.center.x + core.width / 2.0 * theta.cos(),
+                y: core.center.y + core.height / 2.0 * theta.sin(),
+            });
+        }
+        points.extend([
+            Point {
+                x: rect.center.x - line_half,
+                y: core.y0 + core.height,
+            },
+            Point {
+                x: rect.center.x - line_half,
+                y: rect.y0 + rect.height,
+            },
+            Point {
+                x: rect.center.x + line_half,
+                y: rect.y0 + rect.height,
+            },
+            Point {
+                x: rect.center.x + line_half,
+                y: core.y0 + core.height,
+            },
+        ]);
+        for index in 0..=30 {
+            let theta = std::f64::consts::PI / 2.0 - std::f64::consts::PI * f64::from(index) / 30.0;
+            points.push(Point {
+                x: core.center.x + core.width / 2.0 * theta.cos(),
+                y: core.center.y + core.height / 2.0 * theta.sin(),
+            });
+        }
+        points.extend([
+            Point {
+                x: rect.center.x + line_half,
+                y: core.y0,
+            },
+            Point {
+                x: rect.center.x + line_half,
+                y: rect.y0,
+            },
+        ]);
+        return polygon_path(&points);
+    }
     polygon_path(&[
         Point {
             x: rect.center.x - line_half,

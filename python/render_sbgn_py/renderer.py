@@ -17,7 +17,7 @@ import cairo
 
 # Configuration constants
 DEFAULT_PADDING_PX = 50.0
-RENDERER_VERSION = "0.0.6"
+RENDERER_VERSION = "0.0.7"
 DEFAULT_LINE_WIDTH = 1.5
 FONT_FAMILY = "Liberation Sans"
 ARROW_SIZE = 8.0
@@ -898,20 +898,52 @@ def path_ported_glyph(ctx: cairo.Context, rect: PixelRect, glyph: Glyph) -> None
             ]
     else:
         line_half_width = max(rect.width * 0.01, 0.5) / 2.0
-        points = [
-            Point(rect.center.x - line_half_width, rect.y0),
-            Point(rect.center.x - line_half_width, core.y0),
-            Point(core.x0, core.y0),
-            Point(core.x0, core.y0 + core.height),
-            Point(rect.center.x - line_half_width, core.y0 + core.height),
-            Point(rect.center.x - line_half_width, rect.y0 + rect.height),
-            Point(rect.center.x + line_half_width, rect.y0 + rect.height),
-            Point(rect.center.x + line_half_width, core.y0 + core.height),
-            Point(core.x0 + core.width, core.y0 + core.height),
-            Point(core.x0 + core.width, core.y0),
-            Point(rect.center.x + line_half_width, core.y0),
-            Point(rect.center.x + line_half_width, rect.y0),
-        ]
+        if core_type == "circle":
+            left = [
+                Point(
+                    core.center.x + core.width / 2.0 * math.cos(theta),
+                    core.center.y + core.height / 2.0 * math.sin(theta),
+                )
+                for theta in [
+                    -math.pi / 2.0 - math.pi * index / 30.0 for index in range(31)
+                ]
+            ]
+            right = [
+                Point(
+                    core.center.x + core.width / 2.0 * math.cos(theta),
+                    core.center.y + core.height / 2.0 * math.sin(theta),
+                )
+                for theta in [
+                    math.pi / 2.0 - math.pi * index / 30.0 for index in range(31)
+                ]
+            ]
+            points = [
+                Point(rect.center.x - line_half_width, rect.y0),
+                Point(rect.center.x - line_half_width, core.y0),
+                *left,
+                Point(rect.center.x - line_half_width, core.y0 + core.height),
+                Point(rect.center.x - line_half_width, rect.y0 + rect.height),
+                Point(rect.center.x + line_half_width, rect.y0 + rect.height),
+                Point(rect.center.x + line_half_width, core.y0 + core.height),
+                *right,
+                Point(rect.center.x + line_half_width, core.y0),
+                Point(rect.center.x + line_half_width, rect.y0),
+            ]
+        else:
+            points = [
+                Point(rect.center.x - line_half_width, rect.y0),
+                Point(rect.center.x - line_half_width, core.y0),
+                Point(core.x0, core.y0),
+                Point(core.x0, core.y0 + core.height),
+                Point(rect.center.x - line_half_width, core.y0 + core.height),
+                Point(rect.center.x - line_half_width, rect.y0 + rect.height),
+                Point(rect.center.x + line_half_width, rect.y0 + rect.height),
+                Point(rect.center.x + line_half_width, core.y0 + core.height),
+                Point(core.x0 + core.width, core.y0 + core.height),
+                Point(core.x0 + core.width, core.y0),
+                Point(rect.center.x + line_half_width, core.y0),
+                Point(rect.center.x + line_half_width, rect.y0),
+            ]
     ctx.new_path()
     ctx.move_to(points[0].x, points[0].y)
     for point in points[1:]:

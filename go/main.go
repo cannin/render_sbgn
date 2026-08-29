@@ -37,7 +37,7 @@ const (
 	// SBGN coordinates are treated as CSS/SVG-like pixels. canvas itself uses
 	// millimeters/points for text APIs, so text sizes are converted separately.
 	defaultPaddingPx    = 50.0
-	rendererVersion     = "0.0.6"
+	rendererVersion     = "0.0.7"
 	fontFamilyName      = "Liberation Sans"
 	arrowSize           = 8.0
 	cytoscapeArrowScale = 4.53125
@@ -2801,7 +2801,21 @@ func portedGlyphPath(rect PixelRect, glyph *Glyph) *canvas.Path {
 		}
 	} else {
 		lineHalf := math.Max(rect.Width*0.01, 0.5) / 2.0
-		points = []Point{{rect.Center.X - lineHalf, rect.Y0}, {rect.Center.X - lineHalf, core.Y0}, {core.X0, core.Y0}, {core.X0, core.Y0 + core.Height}, {rect.Center.X - lineHalf, core.Y0 + core.Height}, {rect.Center.X - lineHalf, rect.Y0 + rect.Height}, {rect.Center.X + lineHalf, rect.Y0 + rect.Height}, {rect.Center.X + lineHalf, core.Y0 + core.Height}, {core.X0 + core.Width, core.Y0 + core.Height}, {core.X0 + core.Width, core.Y0}, {rect.Center.X + lineHalf, core.Y0}, {rect.Center.X + lineHalf, rect.Y0}}
+		if coreCircle {
+			points = append(points, Point{X: rect.Center.X - lineHalf, Y: rect.Y0}, Point{X: rect.Center.X - lineHalf, Y: core.Y0})
+			for i := 0; i <= 30; i++ {
+				theta := -math.Pi/2.0 - math.Pi*float64(i)/30.0
+				points = append(points, Point{X: core.Center.X + core.Width/2.0*math.Cos(theta), Y: core.Center.Y + core.Height/2.0*math.Sin(theta)})
+			}
+			points = append(points, Point{X: rect.Center.X - lineHalf, Y: core.Y0 + core.Height}, Point{X: rect.Center.X - lineHalf, Y: rect.Y0 + rect.Height}, Point{X: rect.Center.X + lineHalf, Y: rect.Y0 + rect.Height}, Point{X: rect.Center.X + lineHalf, Y: core.Y0 + core.Height})
+			for i := 0; i <= 30; i++ {
+				theta := math.Pi/2.0 - math.Pi*float64(i)/30.0
+				points = append(points, Point{X: core.Center.X + core.Width/2.0*math.Cos(theta), Y: core.Center.Y + core.Height/2.0*math.Sin(theta)})
+			}
+			points = append(points, Point{X: rect.Center.X + lineHalf, Y: core.Y0}, Point{X: rect.Center.X + lineHalf, Y: rect.Y0})
+		} else {
+			points = []Point{{rect.Center.X - lineHalf, rect.Y0}, {rect.Center.X - lineHalf, core.Y0}, {core.X0, core.Y0}, {core.X0, core.Y0 + core.Height}, {rect.Center.X - lineHalf, core.Y0 + core.Height}, {rect.Center.X - lineHalf, rect.Y0 + rect.Height}, {rect.Center.X + lineHalf, rect.Y0 + rect.Height}, {rect.Center.X + lineHalf, core.Y0 + core.Height}, {core.X0 + core.Width, core.Y0 + core.Height}, {core.X0 + core.Width, core.Y0}, {rect.Center.X + lineHalf, core.Y0}, {rect.Center.X + lineHalf, rect.Y0}}
+		}
 	}
 	return polygonPath(points)
 }
