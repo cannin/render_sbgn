@@ -96,6 +96,10 @@ an uncommitted working tree or move a tag that has already been published.
 - Avoid renderer-algorithm rewrites during repository maintenance.
 - When common behavior changes, update the shared behavior section in
   `README.md` and test all four renderers.
+- Every renderer-code change must render both inputs
+  `render_examples/sbgn_all_symbols/af_all_glyphs.sbgn` and
+  `render_examples/sbgn_all_symbols/pd_all_glyphs.sbgn`, then regenerate and
+  commit `docs/images/sbgn_all_symbols.png` in the same change.
 - Keep package versions coordinated. Python, Rust, and R metadata and exposed
   CLI versions must agree. Go releases use subdirectory tags such as
   `go/vX.Y.Z`; do not add a version field to `go.mod`.
