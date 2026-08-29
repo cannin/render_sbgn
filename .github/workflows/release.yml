@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Coordinated version to validate without publishing
-        required: true
-        default: "0.0.5"
 
 permissions:
   contents: write
@@ -21,14 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate coordinated version
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-        run: |
-          release_version="${GITHUB_REF_NAME#v}"
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            release_version="$REQUESTED_VERSION"
-          fi
-          ./scripts/check-versions.sh "$release_version"
+        run: ./scripts/check-versions.sh "${GITHUB_REF_NAME#v}"
       - name: Package tagged sources
         run: ./scripts/package-sources.sh dist "$GITHUB_SHA"
       - uses: actions/upload-artifact@v4
@@ -188,7 +175,6 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    if: github.event_name == 'push'
     needs:
       - source-archives
       - python-wheel

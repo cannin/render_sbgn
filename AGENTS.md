@@ -75,16 +75,8 @@ Windows release binaries. Linux and Windows target amd64; macOS targets arm64.
 - `SHA256SUMS.txt` covering every uploaded artifact.
 
 Before tagging, run `./scripts/test-all.sh`, the local `act` command above, and
-`./scripts/check-versions.sh X.Y.Z`. Push the release commit, then exercise the
-native Linux, macOS, and Windows builders without publishing:
-
-```bash
-gh workflow run release.yml -f version=X.Y.Z
-gh run watch --exit-status
-```
-
-Only after that workflow succeeds, create the coordinated tags at the same
-commit:
+`./scripts/check-versions.sh X.Y.Z`. Commit and push all release changes, then
+create the coordinated tags at the same commit:
 
 ```bash
 git tag -a vX.Y.Z -m "render_sbgn X.Y.Z"
