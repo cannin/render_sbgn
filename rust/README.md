@@ -1,7 +1,6 @@
 # render_sbgn_rs
 
 Rust SBGN-ML renderer using `tiny-skia` and an embedded Liberation Sans font.
-Crate version: 0.0.5.
 
 The deployment artifact is a statically linked Linux musl executable. The
 renderer has no Cairo or other host graphics-library dependency.

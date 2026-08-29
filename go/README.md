@@ -1,8 +1,8 @@
 # render_sbgn_go
 
-Go SBGN-ML renderer using `github.com/tdewolff/canvas`. Release version 0.0.5
-is represented by the repository tag `go/v0.0.5`, following Go conventions for
-a module in a subdirectory.
+Go SBGN-ML renderer using `github.com/tdewolff/canvas`. Releases use a
+subdirectory-prefixed tag such as `go/vX.Y.Z`, following Go conventions for a
+module in a subdirectory.
 
 Prebuilt release executables are available for Ubuntu Linux and Windows on
 amd64, and macOS on arm64, from the

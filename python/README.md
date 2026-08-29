@@ -1,6 +1,6 @@
 # render_sbgn_py
 
-Python SBGN-ML renderer using pycairo. Package version: 0.0.5.
+Python SBGN-ML renderer using pycairo.
 
 ## Requirements and installation
 
@@ -15,7 +15,7 @@ first.
 
 Alternatively, download the `.whl` file from the
 [project releases](https://github.com/cannin/render_sbgn/releases) and install
-it with `python -m pip install ./render_sbgn_py-0.0.5-py3-none-any.whl`.
+it with `python -m pip install ./render_sbgn_py-<version>-py3-none-any.whl`.
 
 ## Usage
 

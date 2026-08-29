@@ -50,7 +50,7 @@ act push -j ubuntu-all-renderers
 Validate coordinated package versions and build release inputs with:
 
 ```bash
-./scripts/check-versions.sh 0.0.5
+./scripts/check-versions.sh X.Y.Z
 ./scripts/package-sources.sh dist HEAD
 (cd python && uv build --wheel --out-dir ../dist)
 ./scripts/test-r.sh
@@ -98,7 +98,7 @@ an uncommitted working tree or move a tag that has already been published.
   `README.md` and test all four renderers.
 - Keep package versions coordinated. Python, Rust, and R metadata and exposed
   CLI versions must agree. Go releases use subdirectory tags such as
-  `go/v0.0.5`; do not add a version field to `go.mod`.
+  `go/vX.Y.Z`; do not add a version field to `go.mod`.
 - Rust release artifacts must target musl and remain independent of host C
   libraries. Keep fonts embedded in the binary.
 - Use ASCII source, format with Black/flake8 where configured for Python,
@@ -108,9 +108,8 @@ an uncommitted working tree or move a tag that has already been published.
 
 - The four imported histories are intentionally unrelated and joined by merge
   commits. Do not flatten or rewrite them.
-- Some SBGN examples intentionally exercise malformed alignment or uncommon
-  glyphs; a successful parse/render is still expected unless `README.md` says
-  otherwise.
+- Some SBGN examples intentionally exercise uncommon glyphs; a successful
+  parse/render is still expected unless `README.md` says otherwise.
 - PNG bytes can vary by backend even when the image is equivalent. Conformance
   checks compare observable image properties and manifests rather than raw PNG
   hashes.

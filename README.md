@@ -5,7 +5,10 @@ implementations in Python, Rust, Go, and R. The four implementations live in
 one repository so renderer behavior, examples, releases, and conformance checks
 can evolve together while each package remains independently installable.
 
-The coordinated project version is **0.0.5**.
+![Activity flow and process description symbol renders](docs/images/sbgn_all_symbols.png)
+
+The two-column preview renders `af_all_glyphs.sbgn` on the left and
+`pd_all_glyphs.sbgn` on the right.
 
 Prebuilt packages and executables are available on the
 [GitHub Releases page](https://github.com/cannin/render_sbgn/releases). Each
@@ -26,7 +29,7 @@ toolchains.
 
 ## Release downloads
 
-The `v0.0.5` release provides:
+Each release provides:
 
 - Python: a platform-independent wheel; Cairo must still be installed.
 - Rust: a static musl executable for Ubuntu Linux amd64, a macOS arm64
@@ -114,7 +117,7 @@ act push -j ubuntu-all-renderers
 ```
 
 Pushing a `v*` tag runs the release workflow. The Go module also receives its
-required subdirectory-prefixed tag, such as `go/v0.0.5`.
+required subdirectory-prefixed tag, such as `go/vX.Y.Z`.
 
 ## Repository layout
 
@@ -128,9 +131,9 @@ required subdirectory-prefixed tag, such as `go/v0.0.5`.
 
 ## Versioning
 
-Package metadata is coordinated at `0.0.5`. Repository releases use `v0.0.5`;
-because the Go module is in a subdirectory, its corresponding module tag is
-`go/v0.0.5`.
+Package metadata is coordinated across all implementations. Repository releases
+use `vX.Y.Z`; because the Go module is in a subdirectory, its corresponding
+module tag is `go/vX.Y.Z`.
 
 ## License
 
