@@ -6,6 +6,11 @@ Crate version: 0.0.5.
 The deployment artifact is a statically linked Linux musl executable. The
 renderer has no Cairo or other host graphics-library dependency.
 
+Prebuilt release executables are available for static musl Ubuntu Linux on
+amd64, macOS on arm64, and Windows on amd64 from the
+[project releases](https://github.com/cannin/render_sbgn/releases). On Linux or
+macOS, run `chmod +x` on a downloaded executable before use.
+
 ## Build the musl release
 
 From the repository root:
@@ -20,9 +25,6 @@ The executable is written to:
 ```text
 rust/target/x86_64-unknown-linux-musl/release/render_sbgn_rs
 ```
-
-Set `RUST_MUSL_TARGET=aarch64-unknown-linux-musl` to build the ARM64 Linux
-variant after installing that target.
 
 ## Local development and usage
 

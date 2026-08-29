@@ -7,6 +7,11 @@ can evolve together while each package remains independently installable.
 
 The coordinated project version is **0.0.5**.
 
+Prebuilt packages and executables are available on the
+[GitHub Releases page](https://github.com/cannin/render_sbgn/releases). Each
+release includes SHA-256 checksums, complete tagged source, and separate source
+archives for every implementation.
+
 ## Choose an implementation
 
 | Implementation | Requirements | Install/build | Documentation |
@@ -18,6 +23,22 @@ The coordinated project version is **0.0.5**.
 
 Installing one implementation does not install or require the other language
 toolchains.
+
+## Release downloads
+
+The `v0.0.5` release provides:
+
+- Python: a platform-independent wheel; Cairo must still be installed.
+- Rust: a static musl executable for Ubuntu Linux amd64, a macOS arm64
+  executable, and a Windows amd64 executable.
+- Go: executables for Ubuntu Linux amd64, macOS arm64, and Windows amd64.
+- R: the installable source package produced by `R CMD build` and accepted by
+  `R CMD check`.
+- Source: one complete monorepo archive and one tagged archive per language,
+  in addition to GitHub's automatic source archives.
+
+After downloading an executable on Linux or macOS, make it executable with
+`chmod +x <download>`. Verify downloads with `SHA256SUMS.txt`.
 
 ## Quick start
 
@@ -91,6 +112,9 @@ the same workflow locally with [act](https://github.com/nektos/act):
 ```bash
 act push -j ubuntu-all-renderers
 ```
+
+Pushing a `v*` tag runs the release workflow. The Go module also receives its
+required subdirectory-prefixed tag, such as `go/v0.0.5`.
 
 ## Repository layout
 

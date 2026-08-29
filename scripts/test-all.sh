@@ -4,6 +4,8 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+"$repository_root/scripts/check-versions.sh"
+
 (
   cd "$repository_root/python"
   uv run --with pytest pytest

@@ -11,6 +11,8 @@
 - Added shared behavior documentation and cross-language conformance tests.
 - Added an Ubuntu GitHub Actions workflow, verified locally with `act`, for all
   renderers and the Rust musl release.
+- Added coordinated release automation for tagged source archives, checked
+  Python and R packages, cross-platform Go and Rust executables, and checksums.
 - Standardized package and CLI versions at 0.0.5.
 - Retained the Rust implementation's pure-Rust rendering backend, embedded
   fonts, Lambda entry point, and Linux musl release configuration.
