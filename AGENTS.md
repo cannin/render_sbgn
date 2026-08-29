@@ -41,6 +41,12 @@ Build the Linux musl Rust release with:
 ./scripts/build-rust-musl.sh
 ```
 
+Run the Ubuntu GitHub Actions job locally with:
+
+```bash
+act push -j ubuntu-all-renderers
+```
+
 ## Editing constraints
 
 - Preserve the native package layout and independent installation path of each
@@ -68,3 +74,5 @@ Build the Linux musl Rust release with:
   hashes.
 - `tests/output/`, language build directories, package archives, and Lambda zip
   files are generated and must stay untracked.
+- Keep `.github/workflows/ci.yml` compatible with local `act` execution; `.actrc`
+  selects an Ubuntu-compatible x86_64 runner image.

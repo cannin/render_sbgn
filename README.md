@@ -82,6 +82,16 @@ Run only the shared renderer conformance suite:
 The conformance suite verifies successful rendering, PNG signatures and
 dimensions, and renderer manifests for every canonical `.sbgn` file.
 
+## Continuous integration
+
+The GitHub Actions workflow runs all four renderers on Ubuntu, including the
+shared conformance suite and a statically linked Rust musl release build. Test
+the same workflow locally with [act](https://github.com/nektos/act):
+
+```bash
+act push -j ubuntu-all-renderers
+```
+
 ## Repository layout
 
 - [python/](python/) - Python package and tests.
