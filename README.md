@@ -5,10 +5,18 @@ implementations in Python, Rust, Go, and R. The four implementations live in
 one repository so renderer behavior, examples, releases, and conformance checks
 can evolve together while each package remains independently installable.
 
-![Activity flow and process description symbol renders](docs/images/sbgn_all_symbols.png)
+## Renderer comparison
 
-The two-column preview renders `af_all_glyphs.sbgn` on the left and
-`pd_all_glyphs.sbgn` on the right.
+Each two-column image compares the Python, Rust, Go, and R implementations on
+the same canonical input.
+
+### Activity flow symbols
+
+![Activity flow symbols rendered by Python, Rust, Go, and R](docs/images/af_all_glyphs_renderers.png)
+
+### Process description symbols
+
+![Process description symbols rendered by Python, Rust, Go, and R](docs/images/pd_all_glyphs_renderers.png)
 
 Prebuilt packages and executables are available on the
 [GitHub Releases page](https://github.com/cannin/render_sbgn/releases). Each
