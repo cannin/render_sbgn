@@ -5,6 +5,7 @@ on:
     branches:
       - "**"
     paths:
+      - ".github/workflows/ci.yml"
       - "rust/**"
       - "go/**"
       - "python/**"
@@ -15,6 +16,7 @@ on:
       - "!r/**/README.md"
   pull_request:
     paths:
+      - ".github/workflows/ci.yml"
       - "rust/**"
       - "go/**"
       - "python/**"
@@ -95,5 +97,6 @@ jobs:
         run: |
           ./scripts/build-rust-musl.sh
           binary="rust/target/x86_64-unknown-linux-musl/release/render_sbgn_rs"
-          test "$("$binary" --version)" = "0.0.8"
+          expected_version="$(awk -F ' = ' '$1 == "version" { gsub(/"/, "", $2); print $2; exit }' rust/Cargo.toml)"
+          test "$("$binary" --version)" = "$expected_version"
           file "$binary" | grep -Eq 'statically linked|static-pie linked'
