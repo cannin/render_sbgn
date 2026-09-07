@@ -37,7 +37,7 @@ const (
 	// SBGN coordinates are treated as CSS/SVG-like pixels. canvas itself uses
 	// millimeters/points for text APIs, so text sizes are converted separately.
 	defaultPaddingPx    = 50.0
-	rendererVersion     = "0.0.7"
+	rendererVersion     = "0.0.8"
 	fontFamilyName      = "Liberation Sans"
 	arrowSize           = 8.0
 	cytoscapeArrowScale = 4.53125

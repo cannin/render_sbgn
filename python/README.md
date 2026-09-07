@@ -29,6 +29,22 @@ An explicit `.png` or `.svg` output path writes that format. Without an output
 path, `--format png,svg` writes both formats. Run `uv run render_sbgn_py --help`
 for styling, sizing, clone-marker, and manifest options.
 
+## Library usage
+
+The renderer can also be called directly from Python:
+
+```python
+from pathlib import Path
+
+from render_sbgn_py import draw_sbgnml
+
+
+draw_sbgnml(Path("diagram.sbgn"), Path("diagram.png"))
+```
+
+The public package API also exports `write_render_test_manifest`. Both functions
+accept filesystem paths, write their results to disk, and return `None`.
+
 ## Tests
 
 ```bash

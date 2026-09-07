@@ -1,7 +1,7 @@
 Package: renderSbgnR
 Type: Package
 Title: Render SBGN-ML Diagrams with Base R Graphics
-Version: 0.0.7
+Version: 0.0.8
 Authors@R: person("Cannin", "Contributors", role = c("aut", "cre"),
     email = "noreply@example.com")
 Author: Cannin Contributors [aut, cre]

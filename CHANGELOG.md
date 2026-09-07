@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.8 - 2026-09-07
+
+- Exposed the Python renderer and render-manifest entry points as a documented
+  package-level library API.
+
 ## 0.0.7 - 2026-08-29
 
 - Rendered `AND`, `OR`, and `NOT` logical nodes with circular cores for both

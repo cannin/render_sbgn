@@ -1,4 +1,6 @@
-"""render_sbgn_py package."""
+"""Public API for the render_sbgn_py package."""
 
-__all__ = ["__version__"]
-__version__ = "0.0.7"
+from .renderer import draw_sbgnml, write_render_test_manifest
+
+__all__ = ["__version__", "draw_sbgnml", "write_render_test_manifest"]
+__version__ = "0.0.8"

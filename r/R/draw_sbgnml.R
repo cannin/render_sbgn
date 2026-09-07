@@ -14,7 +14,7 @@ NULL
 
 # Configuration constants for layout and styling.
 DEFAULT_PADDING_PX <- 50
-RENDERER_VERSION <- "0.0.7"
+RENDERER_VERSION <- "0.0.8"
 FONT_MIN_PX <- 6
 FONT_BASE_PX <- 12
 FONT_FAMILY <- "Liberation Sans"
