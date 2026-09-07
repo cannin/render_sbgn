@@ -6,7 +6,9 @@
 #' @import grDevices
 #' @import graphics
 #' @import jsonlite
+#' @import showtext
 #' @import stats
+#' @import sysfonts
 #' @import utils
 #' @import xml2
 #' @noRd
@@ -14,10 +16,18 @@ NULL
 
 # Configuration constants for layout and styling.
 DEFAULT_PADDING_PX <- 50
-RENDERER_VERSION <- "0.0.8"
+RENDERER_VERSION <- "0.0.9"
 FONT_MIN_PX <- 6
-FONT_BASE_PX <- 12
-FONT_FAMILY <- "Liberation Sans"
+# Base R's default 12-point text is 16 pixels at the renderer's 96 DPI.
+FONT_BASE_PX <- 16
+FONT_FAMILIES <- c(
+  "Liberation Sans",
+  "Arial",
+  "DejaVu Sans",
+  "Helvetica",
+  "sans-serif"
+)
+FONT_FAMILY <- "renderSbgnR Liberation Sans"
 TEXT_LINE_SPACING <- 1.12
 ARROW_SIZE <- 8
 CYTOSCAPE_ARROW_SCALE <- 4.53125
@@ -27,6 +37,29 @@ renderer_state$show_process_node_labels <- FALSE
 renderer_state$render_scale <- 1
 renderer_state$auto_contrast_text <- TRUE
 renderer_state$style_config <- NULL
+
+#' Find and register the bundled Liberation Sans font.
+#'
+#' @return The private family alias used for renderer text.
+#' @noRd
+register_renderer_font <- function() {
+  font_path <- system.file(
+    "fonts",
+    "LiberationSans-Regular.ttf",
+    package = "renderSbgnR"
+  )
+  if (font_path == "") {
+    source_root <- getOption("renderSbgnR.source_root", "")
+    font_path <- file.path(source_root, "inst", "fonts", "LiberationSans-Regular.ttf")
+  }
+  if (!file.exists(font_path)) {
+    stop("bundled Liberation Sans font is missing")
+  }
+  if (!(FONT_FAMILY %in% sysfonts::font_families())) {
+    sysfonts::font_add(FONT_FAMILY, regular = font_path)
+  }
+  FONT_FAMILY
+}
 
 JS_NODE_FILL_COLOR <- "#ffffff"
 JS_NODE_BORDER_COLOR <- "#555555"
@@ -2928,7 +2961,12 @@ draw_sbgnml <- function(
 
   render_device <- function(device_fn) {
     device_fn()
-    on.exit(dev.off(), add = TRUE)
+    register_renderer_font()
+    showtext::showtext_begin()
+    on.exit({
+      showtext::showtext_end()
+      dev.off()
+    }, add = TRUE)
     render_parsed_sbgnml(
       parsed,
       padding,

@@ -87,6 +87,11 @@ manifests. Their shared CLI includes `-i`/`--input-path`,
 contrast controls, color/style inputs, and manifest generation. Every CLI
 supports equivalent `-h` and `--help` output for its native invocation.
 
+All implementations bundle Liberation Sans for deterministic label rendering.
+The common external font-reference order is Liberation Sans, Arial, DejaVu
+Sans, Helvetica, then generic sans-serif. Raster output uses the bundled primary
+font directly rather than depending on host fallback.
+
 Invalid XML, missing inputs, unsupported output extensions, invalid options,
 and conflicting color/style sources return a nonzero status. PNG bytes are not
 required to match across backends because font rasterization, antialiasing,

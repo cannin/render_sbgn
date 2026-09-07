@@ -18,7 +18,16 @@ const RENDERER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const ARROW_SIZE: f64 = 8.0;
 const CYTOSCAPE_ARROW_SCALE: f64 = 4.53125;
 const FONT_BYTES: &[u8] = include_bytes!("../assets/LiberationSans-Regular.ttf");
-const SVG_SANS_FONT_FAMILY: &str = "Arial, 'Liberation Sans', Arimo, sans-serif";
+const SVG_SANS_FONT_FAMILY: &str = "'Liberation Sans', Arial, 'DejaVu Sans', Helvetica, sans-serif";
+
+#[cfg(test)]
+const FONT_FAMILY_FALLBACKS: [&str; 5] = [
+    "Liberation Sans",
+    "Arial",
+    "DejaVu Sans",
+    "Helvetica",
+    "sans-serif",
+];
 
 const WHITE_COLOR: Rgba = Rgba::new(1.0, 1.0, 1.0, 1.0);
 const JS_NODE_FILL_COLOR: Rgba = Rgba::new(1.0, 1.0, 1.0, 1.0);
@@ -3566,4 +3575,28 @@ fn transform_with_padding(
         width,
         height,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FONT_BYTES, FONT_FAMILY_FALLBACKS, SVG_SANS_FONT_FAMILY};
+
+    #[test]
+    fn bundled_font_and_fallback_order_are_stable() {
+        assert!(!FONT_BYTES.is_empty());
+        assert_eq!(
+            FONT_FAMILY_FALLBACKS,
+            [
+                "Liberation Sans",
+                "Arial",
+                "DejaVu Sans",
+                "Helvetica",
+                "sans-serif",
+            ]
+        );
+        assert_eq!(
+            SVG_SANS_FONT_FAMILY,
+            "'Liberation Sans', Arial, 'DejaVu Sans', Helvetica, sans-serif"
+        );
+    }
 }

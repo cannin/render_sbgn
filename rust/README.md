@@ -1,6 +1,8 @@
 # render_sbgn_rs
 
 Rust SBGN-ML renderer using `tiny-skia` and an embedded Liberation Sans font.
+SVG font references use the fallback order Liberation Sans, Arial, DejaVu Sans,
+Helvetica, then generic sans-serif.
 
 The deployment artifact is a statically linked Linux musl executable. The
 renderer has no Cairo or other host graphics-library dependency.

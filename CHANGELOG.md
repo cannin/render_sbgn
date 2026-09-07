@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.9 - 2026-09-07
+
+- Bundled Liberation Sans with every renderer implementation for deterministic
+  access without a host font installation.
+- Standardized the fallback order as Liberation Sans, Arial, DejaVu Sans,
+  Helvetica, and generic sans-serif.
+
 ## 0.0.8 - 2026-09-07
 
 - Exposed the Python renderer and render-manifest entry points as a documented

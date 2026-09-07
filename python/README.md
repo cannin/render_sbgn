@@ -13,6 +13,9 @@ uv sync
 If pycairo cannot find Cairo, install the platform's Cairo development package
 first.
 
+The package bundles Liberation Sans and registers it privately at runtime, so
+normal rendering does not depend on system-font fallback.
+
 Alternatively, download the `.whl` file from the
 [project releases](https://github.com/cannin/render_sbgn/releases) and install
 it with `python -m pip install ./render_sbgn_py-<version>-py3-none-any.whl`.

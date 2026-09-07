@@ -1,7 +1,7 @@
 Package: renderSbgnR
 Type: Package
 Title: Render SBGN-ML Diagrams with Base R Graphics
-Version: 0.0.8
+Version: 0.0.9
 Authors@R: person("Cannin", "Contributors", role = c("aut", "cre"),
     email = "noreply@example.com")
 Author: Cannin Contributors [aut, cre]
@@ -16,7 +16,9 @@ Imports:
     grDevices,
     graphics,
     jsonlite,
+    showtext,
     stats,
+    sysfonts,
     utils,
     xml2
 Suggests:
@@ -25,4 +27,4 @@ Suggests:
     testthat
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.0
+RoxygenNote: 7.3.3

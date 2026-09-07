@@ -17,6 +17,11 @@ Go 1.25 or newer is required. From this directory:
 go build ./...
 ```
 
+The executable embeds Liberation Sans, so label rendering does not depend on a
+host font installation. If the embedded font cannot be loaded, the fallback
+order is Liberation Sans, Arial, DejaVu Sans, Helvetica, then generic
+sans-serif.
+
 Build and test the current system plus every release target with:
 
 ```bash

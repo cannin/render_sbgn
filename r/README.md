@@ -10,7 +10,10 @@ R 4.2 or newer is required. From the repository root:
 R CMD INSTALL r
 ```
 
-Package dependencies declared in `DESCRIPTION` are `xml2` and `jsonlite`.
+Package dependencies declared in `DESCRIPTION` include `xml2`, `jsonlite`,
+`showtext`, and `sysfonts`. The package bundles Liberation Sans and registers it
+under a private family name before rendering, so normal rendering does not
+depend on system-font fallback.
 
 The [project releases](https://github.com/cannin/render_sbgn/releases) include
 an installable `renderSbgnR_<version>.tar.gz` source package that has passed

@@ -15,11 +15,13 @@ import xml.etree.ElementTree as ET
 
 import cairo
 
+from ._fonts import FONT_FAMILIES, register_bundled_font
+
 # Configuration constants
 DEFAULT_PADDING_PX = 50.0
-RENDERER_VERSION = "0.0.8"
+RENDERER_VERSION = "0.0.9"
 DEFAULT_LINE_WIDTH = 1.5
-FONT_FAMILY = "Liberation Sans"
+FONT_FAMILY = FONT_FAMILIES[0]
 ARROW_SIZE = 8.0
 CYTOSCAPE_ARROW_SCALE = 4.53125
 
@@ -541,6 +543,7 @@ def render_svg(svg_path: Path, width: float, height: float, render_fn) -> None:
 def set_font(ctx: cairo.Context, font_px: float) -> None:
     """Configure font on the Cairo context."""
 
+    register_bundled_font()
     ctx.select_font_face(FONT_FAMILY, cairo.FontSlant.NORMAL, cairo.FontWeight.NORMAL)
     ctx.set_font_size(font_px)
 

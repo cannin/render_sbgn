@@ -14,6 +14,7 @@ package main
 // coverage. New JS-baseline shape support should usually be added by extending
 // jsStyleForGlyphWithColors and pathForJSShape.
 import (
+	_ "embed"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -37,7 +38,7 @@ const (
 	// SBGN coordinates are treated as CSS/SVG-like pixels. canvas itself uses
 	// millimeters/points for text APIs, so text sizes are converted separately.
 	defaultPaddingPx    = 50.0
-	rendererVersion     = "0.0.8"
+	rendererVersion     = "0.0.9"
 	fontFamilyName      = "Liberation Sans"
 	arrowSize           = 8.0
 	cytoscapeArrowScale = 4.53125
@@ -46,6 +47,18 @@ const (
 	// canvas text sizing uses points internally. The renderer stores font
 	// sizes in SBGN pixel-like units and converts them when creating faces.
 	ptPerMm = 72.0 / 25.4
+)
+
+var (
+	//go:embed assets/LiberationSans-Regular.ttf
+	liberationSansRegular []byte
+	fontFamilyFallbacks   = []string{
+		"Liberation Sans",
+		"Arial",
+		"DejaVu Sans",
+		"Helvetica",
+		"sans-serif",
+	}
 )
 
 var (
@@ -1833,12 +1846,14 @@ func buildCanvas(width float64, height float64, background *Color, transform *Tr
 // Parameters: name is the preferred family name before fallback candidates are tried.
 func loadFontFamily(name string) (*canvas.FontFamily, error) {
 	family := canvas.NewFontFamily(name)
+	if err := family.LoadFont(liberationSansRegular, 0, canvas.FontRegular); err == nil {
+		return family, nil
+	}
 	// Keep a practical sans-serif fallback list for hosts with different font
 	// packages. SVG output should also preserve a CSS fallback stack when code
 	// is changed to write text attributes directly.
-	candidates := []string{name, "Liberation Sans", "DejaVu Sans", "Arial", "Helvetica", "sans-serif"}
 	var lastErr error
-	for _, candidate := range candidates {
+	for _, candidate := range fontFamilyFallbacks {
 		if err := family.LoadSystemFont(candidate, canvas.FontRegular); err == nil {
 			return family, nil
 		} else {
